@@ -21,6 +21,7 @@ import {
   createBookingAgent,
   createMarketBook,
   generateMarkets,
+  mention,
   STARTING_CREDITS,
   type MarketBook,
   createElicitationAgent,
@@ -219,9 +220,11 @@ export async function createTripSession(env: Env) {
           return ok(null);
         }
         markets = createMarketBook(generateMarkets(report.plan, UTC_OFFSET_MINUTES), session.trip.members, () => randomUUID().replaceAll("-", "").slice(0, TOKEN_CHARS));
-        const links = markets.links(publicBaseUrl).map((l) => `${l.name}: ${l.url}`).join("\n");
-        const announced = await booking.announce(session, "betting-links", `Bets are open on the plan. Everyone has ${STARTING_CREDITS} play credits. Tap your own link:\n${links}`);
-        if (!announced.ok) lastError = describeError(announced.error);
+        for (const link of markets.links(publicBaseUrl)) {
+          const body = `${mention(link.name)} bets are open on the plan. You have ${STARTING_CREDITS} play credits. This link is yours: ${link.url}`;
+          const announced = await booking.announce(session, "betting-link", link.memberId, body);
+          if (!announced.ok) lastError = describeError(announced.error);
+        }
         return ok(null);
       }),
   };

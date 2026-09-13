@@ -10,13 +10,17 @@ export interface InitialQuestionsInput {
   readonly busyDates: readonly string[];
 }
 
+export const firstName = (name: string): string => name.trim().split(/\s+/)[0] ?? name;
+export const mention = (name: string): string => `@${firstName(name)}`;
+
 /** The opening text. Three questions, each aimed at a variable the planner actually solves for. */
 export function initialQuestions(input: InitialQuestionsInput): string {
   const { member, window } = input;
   const range = formatDateRange(window.earliestStart, window.latestEnd);
+  // In a group chat each person's questions are their own message, addressed by first name so they know which one to answer.
   const opener = input.isOrganizer
-    ? `Hi ${member.name}, I'm on the ${input.destination} planning. Same three questions I'm asking everyone:`
-    : `Hi ${member.name}, I'm helping ${input.organizerName} plan ${input.destination}. Three quick questions:`;
+    ? `${mention(member.name)} I'm on the ${input.destination} planning. Same three questions I'm asking everyone:`
+    : `${mention(member.name)} I'm helping ${firstName(input.organizerName)} plan ${input.destination}. Three quick questions:`;
   const busy = input.busyDates.length > 0 ? ` Your calendar looks busy on ${joinNames(input.busyDates.map(formatDate))}. Is that a hard no?` : "";
   return [
     opener,

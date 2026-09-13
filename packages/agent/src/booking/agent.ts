@@ -223,11 +223,11 @@ export function createBookingAgent(deps: BookingDeps) {
     return { completed, failure: null, plan, confirmationsSent };
   }
 
-  /** One message to the whole group, through the gate under the standing messaging approval. */
-  async function announce(session: ElicitationSession, purpose: string, body: string): Promise<Result<JsonValue>> {
+  /** One message meant for one member, through the gate under the standing messaging approval. */
+  async function announce(session: ElicitationSession, purpose: string, memberId: string, body: string): Promise<Result<JsonValue>> {
     const { trip } = session;
-    const key = `${trip.id}:${purpose}:${trip.organizerId}`;
-    const action = AgentActionSchema.parse({ id: key, idempotencyKey: key, requestedAt: nowIso(), reason: purpose.replaceAll("-", " "), kind: "send_sms", params: { memberId: trip.organizerId, body } });
+    const key = `${trip.id}:${purpose}:${memberId}`;
+    const action = AgentActionSchema.parse({ id: key, idempotencyKey: key, requestedAt: nowIso(), reason: purpose.replaceAll("-", " "), kind: "send_sms", params: { memberId, body } });
     return dispatcherFor(session, null, new Map()).execute(action, { traceId: trip.id, step: "market_gen", approvalTokenId: session.standingApprovalId });
   }
 

@@ -116,7 +116,7 @@ describe("elicitation loop against the twins", () => {
   it("texts everyone the opening questions and folds in Priya's shared calendar", () => {
     expect(session.messages.filter((m) => m.direction === "outbound")).toHaveLength(4);
     expect(outboundTo("priya")[0]).toContain("Your calendar looks busy on Oct 12. Is that a hard no?");
-    expect(outboundTo("dev")[0]).toContain("Hi Dev, I'm helping Maya plan San Diego.");
+    expect(outboundTo("dev")[0]).toContain("@Dev I'm helping Maya plan San Diego.");
     expect(session.trip.members.every((m) => m.responseState === "asked")).toBe(true);
   });
 

@@ -139,7 +139,7 @@ export function createMarketBook(drafts: readonly MarketDraft[], members: readon
     };
   }
 
-  const links = (baseUrl: string) => players.map((p) => ({ name: p.name, url: `${baseUrl}/markets?player=${p.token}` }));
+  const links = (baseUrl: string) => players.map((p) => ({ memberId: p.id, name: p.name, url: `${baseUrl}/markets?player=${p.token}` }));
 
   return { bet, propose, view, links };
 }
