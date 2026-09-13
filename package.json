@@ -1,0 +1,21 @@
+{
+  "name": "group-trip-agent",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "db:migrate": "pnpm --filter @trip/db migrate",
+    "db:generate": "pnpm --filter @trip/db generate"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "~5.9",
+    "vitest": "^3"
+  }
+}

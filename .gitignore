@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.local
+*.db
+*.db-journal
+.next/
+dist/
+coverage/
+.DS_Store
+packages/eval/reports/

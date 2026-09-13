@@ -1,0 +1,251 @@
+// Mirrors packages/core/src/domain.ts. Nested typed values (constraint values, prices,
+// provenance, payloads) are stored as JSON text and parsed with the core Zod schemas on
+// read, so the database is a validated boundary like any other.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Trip {
+  id                   String  @id
+  destination          String
+  earliestStart        String
+  latestEnd            String
+  tripDays             Int
+  organizerId          String
+  status               String
+  candidateOptionsJson String  @default("[]")
+  liveStateJson        String
+  selectedPlanId       String? @unique
+  createdAt            DateTime @default(now())
+
+  members      Member[]
+  plans        Plan[]          @relation("TripPlans")
+  selectedPlan Plan?           @relation("SelectedPlan", fields: [selectedPlanId], references: [id])
+  markets      Market[]
+  events       ObservedEvent[]
+  divergences  Divergence[]
+  approvals    ApprovalToken[]
+  ledger       LedgerEntry[]
+  messages     Message[]
+  actions      ExecutedAction[]
+}
+
+model Member {
+  id            String  @id
+  tripId        String
+  name          String
+  phone         String
+  discordId     String?
+  optedOut      Boolean @default(false)
+  responseState String
+
+  trip        Trip         @relation(fields: [tripId], references: [id])
+  constraints Constraint[]
+  positions   Position[]
+
+  @@unique([tripId, phone])
+}
+
+model Constraint {
+  id             String   @id
+  memberId       String
+  kind           String
+  hardness       String
+  // Denormalized from provenance so "no inferred constraint is ever stated" is a plain query.
+  source         String
+  provenanceJson String
+  valueJson      String
+  recordedAt     DateTime
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@index([memberId, source])
+}
+
+model LedgerEntry {
+  id             String   @id
+  tripId         String
+  paidBy         String
+  amountCents    Int
+  description    String
+  planItemId     String?
+  splitAmongJson String
+  postedAt       DateTime
+
+  trip Trip @relation(fields: [tripId], references: [id])
+}
+
+model Message {
+  id         String   @id
+  tripId     String
+  memberId   String?
+  channel    String
+  direction  String
+  body       String
+  // Provider message id. Unique so a duplicated webhook cannot insert the same reply twice.
+  externalId String?  @unique
+  at         DateTime
+
+  trip Trip @relation(fields: [tripId], references: [id])
+
+  @@index([tripId, memberId, at])
+}
+
+model Plan {
+  id        String   @id
+  tripId    String
+  version   Int
+  createdAt DateTime @default(now())
+
+  trip        Trip       @relation("TripPlans", fields: [tripId], references: [id])
+  selectedFor Trip?      @relation("SelectedPlan")
+  items       PlanItem[]
+
+  @@unique([tripId, version])
+}
+
+model PlanItem {
+  id               String   @id
+  planId           String
+  kind             String
+  title            String
+  startsAt         DateTime
+  endsAt           DateTime
+  costCents        Int
+  participantsJson String
+  bookingRef       String?
+
+  plan       Plan                 @relation(fields: [planId], references: [id])
+  dependsOn  PlanItemDependency[] @relation("Dependent")
+  dependents PlanItemDependency[] @relation("Dependency")
+}
+
+model PlanItemDependency {
+  itemId      String
+  dependsOnId String
+
+  item      PlanItem @relation("Dependent", fields: [itemId], references: [id])
+  dependsOn PlanItem @relation("Dependency", fields: [dependsOnId], references: [id])
+
+  @@id([itemId, dependsOnId])
+}
+
+model Market {
+  id                   String   @id
+  tripId               String
+  question             String
+  kind                 String
+  outcomesJson         String
+  openingPricesJson    String
+  currentPricesJson    String
+  status               String
+  resolutionSourceJson String
+  resolvedOutcome      String?
+  generatedFromJson    String
+  openedAt             DateTime
+  closesAt             DateTime
+
+  trip      Trip       @relation(fields: [tripId], references: [id])
+  positions Position[]
+}
+
+model Position {
+  marketId String
+  memberId String
+  outcome  String
+  shares   Float
+  avgPrice Float
+
+  market Market @relation(fields: [marketId], references: [id])
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@id([marketId, memberId, outcome])
+}
+
+model ObservedEvent {
+  id          String   @id
+  tripId      String
+  at          DateTime
+  kind        String
+  source      String
+  planItemId  String?
+  memberId    String?
+  payloadJson String
+
+  trip Trip @relation(fields: [tripId], references: [id])
+
+  @@index([tripId, at])
+}
+
+model Divergence {
+  id                String   @id
+  tripId            String
+  planItemId        String
+  kind              String
+  severity          String
+  expectedJson      String
+  observedJson      String
+  repairOptionsJson String
+  selectedRepairId  String?
+  detectedAt        DateTime
+
+  trip Trip @relation(fields: [tripId], references: [id])
+}
+
+model ApprovalToken {
+  id        String    @id
+  tripId    String
+  grantedBy String
+  grantedAt DateTime
+  expiresAt DateTime
+  scopeJson String
+  usedAt    DateTime?
+
+  trip    Trip             @relation(fields: [tripId], references: [id])
+  actions ExecutedAction[]
+}
+
+// One row per external write, keyed by idempotency key. The dispatcher inserts before
+// executing, so a retry after write_then_timeout finds the row instead of writing twice.
+model ExecutedAction {
+  idempotencyKey  String   @id
+  tripId          String
+  actionId        String
+  kind            String
+  reversibility   String
+  approvalTokenId String?
+  status          String
+  requestJson     String
+  responseJson    String?
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  trip          Trip           @relation(fields: [tripId], references: [id])
+  approvalToken ApprovalToken? @relation(fields: [approvalTokenId], references: [id])
+}
+
+model TraceSpan {
+  id             String   @id
+  traceId        String
+  parentId       String?
+  step           String
+  name           String
+  startedAt      DateTime
+  endedAt        DateTime
+  latencyMs      Float
+  status         String
+  inputJson      String
+  outputJson     String?
+  errorJson      String?
+  retriesJson    String
+  llmCallsJson   String
+  idempotencyKey String?
+
+  @@index([traceId, startedAt])
+}
