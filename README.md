@@ -252,7 +252,7 @@ Every agent action is traced with inputs, outputs, latency, retries and model co
 
 ## 05. Demo video
 
-**Demo:** [Watch the Concorde demo](https://youtu.be/_MtOsmPcSsA)
+**Demo:** [Watch the Concorde demo](https://youtu.be/zoKhm5eumd8)
 
 ```text
 questions in the iMessage group
