@@ -167,17 +167,22 @@ document.addEventListener("click", async (event) => {
   busy = true;
   lastRendered = "";
   await poll();
-  const res = await fetch(`/api/${target.dataset.action}`, { method: "POST" });
-  const body = await res.json();
-  busy = false;
-  lastRendered = "";
-  if (!res.ok) {
+  try {
+    const res = await fetch(`/api/${target.dataset.action}`, { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error);
+    busy = false;
+    lastRendered = "";
+    render(body);
+  } catch (cause) {
+    // A request that never reached the server must not leave every button disabled.
+    busy = false;
+    lastRendered = "";
     const error = $("error");
     error.hidden = false;
-    error.textContent = body.error;
-    return;
+    error.textContent = cause instanceof Error && cause.message ? cause.message : "That didn't reach Concorde's server. Try again.";
+    await poll();
   }
-  render(body);
 });
 
 poll();
