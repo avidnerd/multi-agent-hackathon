@@ -2,6 +2,8 @@ export * from "./config";
 export * from "./factory";
 export * from "./google-calendar-client";
 export * from "./http";
+export * from "./imessage-client";
+export * from "./routed-messaging";
 export * from "./interfaces";
 export * from "./inventory-client";
 export * from "./llm";

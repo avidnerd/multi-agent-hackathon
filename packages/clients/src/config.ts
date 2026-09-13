@@ -16,6 +16,8 @@ const MessagingConfigSchema = z.discriminatedUnion("MESSAGING_MODE", [
     TWILIO_API_KEY_SECRET: optional,
     TWILIO_FROM_NUMBER: z.preprocess(unsetIfEmpty, PhoneE164Schema),
   }),
+  /** This Mac's Messages app. Needs Full Disk Access to read replies and Automation permission to send. */
+  z.object({ MESSAGING_MODE: z.literal("imessage"), IMESSAGE_CHAT_DB: optional }),
 ]);
 
 const CalendarConfigSchema = z.discriminatedUnion("CALENDAR_MODE", [

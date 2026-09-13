@@ -8,6 +8,7 @@ import type { ElicitationSession } from "./session";
 const EXTRACTION_MAX_TOKENS = 1_500;
 
 export interface InboundDeps {
+  readonly channel: "sms" | "imessage";
   readonly llm: LlmClient;
   readonly trace: TraceRecorder;
   readonly logger: Logger;
@@ -30,7 +31,7 @@ export async function handleInbound(deps: InboundDeps, session: ElicitationSessi
   }
 
   const messageId = `in-${inbound.externalId}`;
-  session.messages.push({ id: messageId, tripId: trip.id, memberId: member.id, channel: "sms", direction: "inbound", body: inbound.body, externalId: inbound.externalId, at: inbound.receivedAt });
+  session.messages.push({ id: messageId, tripId: trip.id, memberId: member.id, channel: deps.channel, direction: "inbound", body: inbound.body, externalId: inbound.externalId, at: inbound.receivedAt });
   const thread = session.threads[member.id];
 
   // Carrier opt-out keywords are honoured before any model sees the text.

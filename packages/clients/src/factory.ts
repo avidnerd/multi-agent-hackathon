@@ -3,6 +3,7 @@ import type { ClientConfig } from "./config";
 import { GOOGLE_CALENDAR_API_BASE_URL, GOOGLE_OAUTH_TOKEN_URL, TWILIO_API_BASE_URL, TWIN_GOOGLE_ACCESS_TOKEN, TWIN_TWILIO_CREDENTIALS } from "./contracts";
 import { createGoogleCalendarClient, createGoogleTokenProvider } from "./google-calendar-client";
 import type { FetchLike } from "./http";
+import { createIMessageClient } from "./imessage-client";
 import type { CalendarClient, InventoryClient, MessagingClient } from "./interfaces";
 import { createInventoryClient } from "./inventory-client";
 import { createTwilioMessagingClient } from "./twilio-client";
@@ -16,7 +17,9 @@ export interface Clients {
 /** The only place that knows whether a client is real or twinned. */
 export function createClients(config: ClientConfig, fetchImpl: FetchLike = fetch): Clients {
   const messaging =
-    config.messaging.MESSAGING_MODE === "twilio"
+    config.messaging.MESSAGING_MODE === "imessage"
+      ? createIMessageClient({ chatDbPath: config.messaging.IMESSAGE_CHAT_DB })
+      : config.messaging.MESSAGING_MODE === "twilio"
       ? createTwilioMessagingClient(
           {
             baseUrl: TWILIO_API_BASE_URL,

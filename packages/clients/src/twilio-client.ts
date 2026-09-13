@@ -53,7 +53,7 @@ export function createTwilioMessagingClient(config: TwilioConfig, fetchImpl: Fet
       return mapResult(result, (m) => ({ externalId: m.sid, to: m.to, sentAt: new Date(Date.parse(m.date_created)).toISOString() }));
     },
 
-    listInbound: async (since) => {
+    listInbound: async (since, from) => {
       // Twilio filters DateSent by calendar day only, so this deliberately over-fetches and trims.
       const params = new URLSearchParams({
         To: config.fromNumber,
@@ -73,6 +73,7 @@ export function createTwilioMessagingClient(config: TwilioConfig, fetchImpl: Fet
       return mapResult(result, (page) =>
         page.messages
           .filter((m) => m.direction === "inbound" && Date.parse(m.date_sent ?? m.date_created) >= since.getTime())
+          .filter((m) => from === undefined || from.includes(m.from))
           .map((m) => ({
             externalId: m.sid,
             from: m.from,

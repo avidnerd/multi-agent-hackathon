@@ -8,7 +8,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p .",
-    "elicit:demo": "tsx --env-file=../../.env src/scripts/elicit-demo.ts"
+    "elicit:demo": "tsx --env-file=../../.env src/scripts/elicit-demo.ts",
+    "imessage:live": "tsx --env-file=../../.env src/scripts/imessage-live.ts"
   },
   "dependencies": {
     "@trip/clients": "workspace:*",

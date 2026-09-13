@@ -68,8 +68,11 @@ export interface MessagingClient {
   readonly channel: "sms" | "imessage";
   /** Not idempotent at the provider. The dispatcher's executed-action record is what prevents a resend. */
   send(message: OutboundMessage): Promise<Result<SentMessage>>;
-  /** Can return messages seen on an earlier poll. Callers dedupe on externalId. */
-  listInbound(since: Date): Promise<Result<InboundMessage[]>>;
+  /**
+   * Replies received since a moment, limited to the given sender handles. Can return messages seen on
+   * an earlier poll; callers dedupe on externalId. iMessage requires `from` so it never reads anyone else's messages.
+   */
+  listInbound(since: Date, from?: readonly string[]): Promise<Result<InboundMessage[]>>;
 }
 
 export interface CalendarEventInput {

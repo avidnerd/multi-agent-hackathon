@@ -186,13 +186,13 @@ export function createElicitationAgent(deps: AgentDeps) {
     const { trip, intake } = session;
     const now = nowIso();
 
-    const polled = await deps.messaging.listInbound(new Date(session.startedAt));
+    const polled = await deps.messaging.listInbound(new Date(session.startedAt), trip.members.map((m) => m.phone));
     if (!polled.ok) return polled;
     const fresh = polled.value.filter((m) => !session.seenExternalIds.has(m.externalId)).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
     const inbound: InboundOutcome[] = [];
     for (const message of fresh) {
       session.seenExternalIds.add(message.externalId);
-      inbound.push(await handleInbound(deps, session, message));
+      inbound.push(await handleInbound({ ...deps, channel: deps.messaging.channel }, session, message));
     }
 
     const options = () => computeFeasibleOptions(trip.members, trip.dateWindow, (start) => session.pricing[start] ?? null);
