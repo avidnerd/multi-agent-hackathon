@@ -66,8 +66,11 @@ export function parseClientConfig(env: Env): Result<ClientConfig> {
   const calendar = CalendarConfigSchema.safeParse(withModes);
   const inventory = InventoryConfigSchema.safeParse(withModes);
   const credentialIssues: string[] = [];
-  if (messaging.success && messaging.data.MESSAGING_MODE === "twilio") {
-    const { TWILIO_AUTH_TOKEN, TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET } = messaging.data;
+  // Checked on the raw values so a missing credential is reported alongside every other config problem.
+  if (withModes.MESSAGING_MODE === "twilio") {
+    const TWILIO_AUTH_TOKEN = unsetIfEmpty(env.TWILIO_AUTH_TOKEN);
+    const TWILIO_API_KEY_SID = unsetIfEmpty(env.TWILIO_API_KEY_SID);
+    const TWILIO_API_KEY_SECRET = unsetIfEmpty(env.TWILIO_API_KEY_SECRET);
     if ((TWILIO_API_KEY_SID === undefined) !== (TWILIO_API_KEY_SECRET === undefined)) {
       credentialIssues.push("TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET must be set together");
     } else if (TWILIO_API_KEY_SID === undefined && TWILIO_AUTH_TOKEN === undefined) {
