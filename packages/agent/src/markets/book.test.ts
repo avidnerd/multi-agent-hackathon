@@ -36,6 +36,11 @@ describe("markets from the plan", () => {
     expect(after.player).toMatchObject({ name: "Julia", credits: STARTING_CREDITS - 25 });
     // Selling straight back returns exactly what was paid, so a bet is never an instant profit.
     expect(after.player?.worth).toBe(STARTING_CREDITS);
+    // The price chart gets the opening price and one point per bet, naming who moved it.
+    const history = after.markets[1]?.history ?? [];
+    expect(history.map((p) => p.by)).toEqual([null, "Julia"]);
+    expect(history[0]?.cents).toEqual([75, 25]);
+    expect(history[1]?.cents[1]).toBe(after.markets[1]?.outcomes[1]?.cents);
   });
 
   it("rejects bets it can't honour", () => {

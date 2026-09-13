@@ -7,6 +7,9 @@
   --blue: #7db3d8;
   --yellow: #efcb3a;
   --red: #c42e21;
+  /* Price line: a deeper step of the board's blue, so a 2px line clears 3:1 on strip paper. */
+  --chart-line: #1f6fb2;
+  --grid: #b7bec4;
   --sans: "Archivo", "Helvetica Neue", Arial, sans-serif;
   --mono: "Martian Mono", "SFMono-Regular", Menlo, monospace;
   color-scheme: light;
@@ -283,6 +286,116 @@ button:focus-visible,
 input:focus-visible {
   outline: 3px solid var(--ink);
   outline-offset: 3px;
+}
+
+/* Price chart. */
+.chart {
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.625rem;
+  border-top: 1px solid var(--ink-soft);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.chart figcaption {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.chart-frame {
+  position: relative;
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  touch-action: pan-y;
+}
+
+.chart .grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.chart .tick {
+  fill: var(--ink-soft);
+  font: 400 9px var(--mono);
+}
+
+.chart .wash {
+  fill: var(--chart-line);
+  opacity: 0.1;
+}
+
+.chart .line {
+  fill: none;
+  stroke: var(--chart-line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart .end {
+  fill: var(--chart-line);
+  stroke: var(--paper);
+  stroke-width: 2;
+}
+
+.chart .crosshair {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+.chart-tip {
+  position: absolute;
+  top: -0.25rem;
+  transform: translate(-50%, -100%);
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.3125rem 0.5rem;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 2px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(17, 20, 24, 0.3);
+}
+
+.chart-tip strong {
+  font: 600 0.875rem / 1.2 var(--mono);
+}
+
+.chart details {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.chart summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.chart table {
+  width: 100%;
+  margin-top: 0.375rem;
+  border-collapse: collapse;
+  color: var(--ink);
+}
+
+.chart th,
+.chart td {
+  text-align: left;
+  padding: 0.1875rem 0.375rem 0.1875rem 0;
+  border-top: 1px solid var(--grid);
+}
+
+.chart td:first-child,
+.chart td:last-child {
+  font-family: var(--mono);
+  white-space: nowrap;
 }
 
 /* Ask the group. */

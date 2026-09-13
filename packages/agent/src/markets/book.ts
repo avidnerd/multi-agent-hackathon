@@ -47,7 +47,20 @@ interface OpenMarket extends MarketDraft {
   volume: number;
   /** Null for Concorde's suggestions; the member's name for a question they put on the board. */
   readonly createdBy: string | null;
+  /** Price after opening and after every bet, for the price chart. */
+  readonly history: PricePoint[];
 }
+
+export interface PricePoint {
+  readonly at: string;
+  /** Whole cents per outcome, in outcome order. */
+  readonly cents: readonly number[];
+  /** Who moved the price, or null for the opening price. */
+  readonly by: string | null;
+}
+
+/** Enough points to read a trend on a phone without the chart turning into noise. */
+const HISTORY_LIMIT = 80;
 
 export interface ProposeInput {
   readonly token: string;
@@ -78,8 +91,14 @@ export interface BetInput {
 
 const rejected = (issue: string): Result<never> => err({ kind: "validation_failed", boundary: "user_input", issues: [issue] });
 
-export function createMarketBook(drafts: readonly MarketDraft[], members: readonly Pick<Member, "id" | "name">[], newToken: () => string) {
-  const markets: OpenMarket[] = drafts.map((d) => ({ ...d, quantities: openingQuantities(d.openingPrices, LIQUIDITY), volume: 0, createdBy: null }));
+const centsOf = (quantities: readonly number[]): number[] => lmsrPrices(quantities, LIQUIDITY).map((p) => Math.round(p * 100));
+
+export function createMarketBook(drafts: readonly MarketDraft[], members: readonly Pick<Member, "id" | "name">[], newToken: () => string, now: () => Date = () => new Date()) {
+  const opened = (quantities: number[]): PricePoint[] => [{ at: now().toISOString(), cents: centsOf(quantities), by: null }];
+  const markets: OpenMarket[] = drafts.map((d) => {
+    const quantities = openingQuantities(d.openingPrices, LIQUIDITY);
+    return { ...d, quantities, volume: 0, createdBy: null, history: opened(quantities) };
+  });
   const players: Player[] = members.map((m) => ({ id: m.id, name: m.name, token: newToken(), credits: STARTING_CREDITS, holdings: new Map() }));
 
   // Holdings are worth what selling them back to the market maker would pay. Valuing at the post-trade
@@ -104,6 +123,8 @@ export function createMarketBook(drafts: readonly MarketDraft[], members: readon
     const shares = sharesForSpend(market.quantities, outcome, input.spend, LIQUIDITY);
     market.quantities[outcome] = (market.quantities[outcome] ?? 0) + shares;
     market.volume += input.spend;
+    market.history.push({ at: now().toISOString(), cents: centsOf(market.quantities), by: player.name });
+    if (market.history.length > HISTORY_LIMIT) market.history.splice(1, market.history.length - HISTORY_LIMIT);
     player.credits -= input.spend;
     const held = player.holdings.get(market.id) ?? market.outcomes.map(() => 0);
     held[outcome] = (held[outcome] ?? 0) + shares;
@@ -121,7 +142,8 @@ export function createMarketBook(drafts: readonly MarketDraft[], members: readon
     if (markets.filter((m) => m.createdBy !== null).length >= MAX_MEMBER_MARKETS) return rejected("The board is full. Bet on a question that's already up.");
     if (markets.some((m) => m.question.toLowerCase() === question.toLowerCase())) return rejected("That question is already on the board");
     const id = `member-${markets.length + 1}`;
-    markets.push({ id, kind: "behavioral", question, outcomes: ["Yes", "No"], openingPrices: EVEN_ODDS, planItemId: null, quantities: openingQuantities(EVEN_ODDS, LIQUIDITY), volume: 0, createdBy: player.name });
+    const quantities = openingQuantities(EVEN_ODDS, LIQUIDITY);
+    markets.push({ id, kind: "behavioral", question, outcomes: ["Yes", "No"], openingPrices: EVEN_ODDS, planItemId: null, quantities, volume: 0, createdBy: player.name, history: opened(quantities) });
     return ok({ marketId: id });
   }
 
@@ -132,7 +154,7 @@ export function createMarketBook(drafts: readonly MarketDraft[], members: readon
       markets: markets.map((m) => {
         const prices = lmsrPrices(m.quantities, LIQUIDITY);
         const held = player?.holdings.get(m.id);
-        return { id: m.id, kind: m.kind, question: m.question, createdBy: m.createdBy, volume: m.volume, outcomes: m.outcomes.map((name, i) => ({ name, cents: Math.round((prices[i] ?? 0) * 100), held: held?.[i] ?? 0 })) };
+        return { id: m.id, kind: m.kind, question: m.question, createdBy: m.createdBy, volume: m.volume, history: m.history, outcomes: m.outcomes.map((name, i) => ({ name, cents: Math.round((prices[i] ?? 0) * 100), held: held?.[i] ?? 0 })) };
       }),
       player: player === undefined ? null : { name: player.name, credits: player.credits, worth: Math.round(player.credits + valueOf(player)) },
       standings: players.map((p) => ({ name: p.name, worth: Math.round(p.credits + valueOf(p)) })).sort((a, b) => b.worth - a.worth),
