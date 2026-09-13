@@ -102,7 +102,7 @@ export async function createTripSession(env: Env) {
 
   const trace = createTraceRecorder({ now: () => new Date(), newId: randomUUID });
   const deps = {
-    messaging: groupName === null ? createTwilioMessagingClient({ baseUrl: twilioServer.url, ...TWIN_TWILIO_CREDENTIALS }) : createIMessageClient({ groupChatName: groupName }),
+    messaging: groupName === null ? createTwilioMessagingClient({ baseUrl: twilioServer.url, ...TWIN_TWILIO_CREDENTIALS }) : createIMessageClient({ groupChatName: groupName, selfHandle: env.IMESSAGE_SELF_HANDLE?.trim() || undefined }),
     calendar:
       googleCalendar === null
         ? createGoogleCalendarClient({ baseUrl: calendarServer.url, calendarId: "primary", accessToken: async () => ok(TWIN_GOOGLE_ACCESS_TOKEN) })

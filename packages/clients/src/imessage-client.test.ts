@@ -49,6 +49,37 @@ describe("iMessage client", () => {
     });
   });
 
+  it("reads one group chat, counting this Mac's own messages as the self member unless the agent sent them", async () => {
+    const db = new DatabaseSync(dbPath);
+    db.exec("CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, display_name TEXT); CREATE TABLE chat_message_join (chat_id INTEGER, message_id INTEGER);");
+    db.prepare("INSERT INTO chat (ROWID, display_name) VALUES (?, ?)").run(1, "trip group");
+    db.prepare("INSERT INTO chat (ROWID, display_name) VALUES (?, ?)").run(2, "some other chat");
+    const insert = db.prepare("INSERT INTO message (ROWID, guid, text, attributedBody, date, is_from_me, handle_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    const link = db.prepare("INSERT INTO chat_message_join (chat_id, message_id) VALUES (?, ?)");
+    const rows: ReadonlyArray<readonly [number, string, string, string, number, number, number]> = [
+      [101, "grp-concorde", "Hi Subhi, which days work?", "2026-09-13T19:00:00Z", 1, 0, 1],
+      [102, "grp-self", "I can do the 9th to 11th", "2026-09-13T19:01:00Z", 1, 0, 1],
+      [103, "grp-member", "same, under $800", "2026-09-13T19:02:00Z", 0, 1, 1],
+      [104, "dm-member", "not in the group", "2026-09-13T19:03:00Z", 0, 1, 2],
+    ];
+    for (const [id, guid, text, at, fromMe, handle, chat] of rows) {
+      insert.run(id, guid, text, null, appleNanos(at), fromMe, handle);
+      link.run(chat, id);
+    }
+    db.close();
+
+    const client = createIMessageClient({ chatDbPath: dbPath, groupChatName: "trip group", selfHandle: "+17372285422", runAppleScript: async () => ({ ok: true }) });
+    await client.send({ to: "+17372285422", body: "Hi Subhi, which days work?" });
+    const result = await client.listInbound(new Date("2026-09-13T18:30:00Z"), ["+17372285422", "+14155550101"]);
+    expect(result).toMatchObject({
+      ok: true,
+      value: [
+        { externalId: "grp-self", from: "+17372285422", body: "I can do the 9th to 11th" },
+        { externalId: "grp-member", from: "+14155550101", body: "same, under $800" },
+      ],
+    });
+  });
+
   it("refuses to read without a list of member handles", async () => {
     const result = await createIMessageClient({ chatDbPath: dbPath }).listInbound(new Date(0));
     expect(result).toMatchObject({ ok: false, error: { kind: "validation_failed" } });

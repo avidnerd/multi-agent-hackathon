@@ -118,7 +118,9 @@ const ChatRowSchema = z.object({
   text: z.string().nullable(),
   attributedBody: z.instanceof(Uint8Array).nullable(),
   date: z.union([z.number(), z.bigint()]),
-  handle: z.string(),
+  /** Null for messages sent from this Mac's own account, which carry no sender handle. */
+  handle: z.string().nullable(),
+  fromMe: z.union([z.number(), z.bigint()]),
 });
 
 const appleDateToMs = (date: number | bigint): number => {
@@ -133,6 +135,12 @@ export interface IMessageConfig {
    * in that group are read. The member a message is meant for is still named in its text.
    */
   readonly groupChatName?: string;
+  /**
+   * This Mac's own number, when a trip member (usually the organizer) is the person signed into it.
+   * Their group messages are stored as sent-by-me; in group mode they are read as that member's replies,
+   * except messages whose text matches something this client sent.
+   */
+  readonly selfHandle?: string;
   readonly runAppleScript?: AppleScriptRunner;
   readonly now?: () => Date;
 }
@@ -141,6 +149,8 @@ export function createIMessageClient(config: IMessageConfig = {}): MessagingClie
   const chatDbPath = config.chatDbPath ?? CHAT_DB_PATH;
   const run = config.runAppleScript ?? runOsascript;
   const now = config.now ?? (() => new Date());
+  /** Texts this client sent, so the self member's messages can be told apart from the agent's own. */
+  const sentBodies = new Set<string>();
 
   return {
     channel: "imessage",
@@ -156,6 +166,7 @@ export function createIMessageClient(config: IMessageConfig = {}): MessagingClie
             : { kind: "upstream_failed", service: "messaging", status: null, detail: `Messages refused the send: ${outcome.detail}` },
         );
       }
+      sentBodies.add(body.trim());
       const sentAt = now().toISOString();
       return ok({ externalId: `imessage:${to}:${sentAt}`, to, sentAt });
     },
@@ -171,10 +182,13 @@ export function createIMessageClient(config: IMessageConfig = {}): MessagingClie
         const group = config.groupChatName;
         const groupJoin = group === undefined ? "" : "JOIN chat_message_join cmj ON cmj.message_id = m.ROWID JOIN chat c ON c.ROWID = cmj.chat_id";
         const groupFilter = group === undefined ? "" : "AND c.display_name = ?";
+        const selfHandle = config.selfHandle;
+        const includeSelf = group !== undefined && selfHandle !== undefined && from.includes(selfHandle);
+        const senderFilter = includeSelf ? `((m.is_from_me = 0 AND h.id IN (${placeholders})) OR m.is_from_me = 1)` : `m.is_from_me = 0 AND h.id IN (${placeholders})`;
         const statement = db.prepare(
-          `SELECT m.guid AS guid, m.text AS text, m.attributedBody AS attributedBody, m.date AS date, h.id AS handle
-           FROM message m JOIN handle h ON h.ROWID = m.handle_id ${groupJoin}
-           WHERE m.is_from_me = 0 AND m.date >= ? ${groupFilter} AND h.id IN (${placeholders})
+          `SELECT m.guid AS guid, m.text AS text, m.attributedBody AS attributedBody, m.date AS date, h.id AS handle, m.is_from_me AS fromMe
+           FROM message m LEFT JOIN handle h ON h.ROWID = m.handle_id ${groupJoin}
+           WHERE m.date >= ? ${groupFilter} AND ${senderFilter}
            ORDER BY m.date ASC LIMIT ${INBOUND_LIMIT}`,
         );
         // Message dates are nanoseconds since 2001, past Number's safe range; node:sqlite throws unless asked for BigInt.
@@ -188,7 +202,11 @@ export function createIMessageClient(config: IMessageConfig = {}): MessagingClie
           const body = row.data.text ?? (row.data.attributedBody === null ? null : decodeAttributedBody(row.data.attributedBody));
           // Tapbacks, stickers and attachments carry no text; they are not answers.
           if (body === null || body.trim().length === 0) continue;
-          messages.push({ externalId: row.data.guid, from: row.data.handle, body, receivedAt: new Date(appleDateToMs(row.data.date)).toISOString() });
+          const fromMe = Number(row.data.fromMe) === 1;
+          if (fromMe && (!includeSelf || sentBodies.has(body.trim()))) continue;
+          const sender = fromMe ? selfHandle : row.data.handle;
+          if (sender === undefined || sender === null) continue;
+          messages.push({ externalId: row.data.guid, from: sender, body, receivedAt: new Date(appleDateToMs(row.data.date)).toISOString() });
         }
         return ok(messages);
       } catch (cause) {
