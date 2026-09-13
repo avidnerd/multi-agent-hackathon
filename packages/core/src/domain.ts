@@ -63,7 +63,7 @@ export type PlanItemKind = z.infer<typeof PlanItemKindSchema>;
 export const HardnessSchema = z.enum(["hard", "soft"]);
 export type Hardness = z.infer<typeof HardnessSchema>;
 
-export const CONSTRAINT_SOURCES = ["stated", "inferred_from_market", "default_applied"] as const;
+export const CONSTRAINT_SOURCES = ["stated", "inferred_from_market", "default_applied", "calendar_busy"] as const;
 export type ConstraintSource = (typeof CONSTRAINT_SOURCES)[number];
 
 /**
@@ -86,6 +86,13 @@ export const ProvenanceSchema = z.discriminatedUnion("source", [
     source: z.literal("default_applied"),
     silentSince: IsoDateTimeSchema,
     announcedAt: IsoDateTimeSchema,
+  }),
+  /** A busy block on a member's shared calendar. Free/busy hides titles, so it is a hint to confirm by text, not a known conflict. */
+  z.object({
+    source: z.literal("calendar_busy"),
+    calendarId: z.string().min(1),
+    busyStart: IsoDateTimeSchema,
+    busyEnd: IsoDateTimeSchema,
   }),
 ]);
 export type Provenance = z.infer<typeof ProvenanceSchema>;

@@ -11,7 +11,7 @@ import {
   type GoogleEventWrite,
 } from "./contracts";
 import { httpRequest, type FetchLike } from "./http";
-import type { CalendarClient, CalendarEvent } from "./interfaces";
+import type { CalendarAvailability, CalendarClient, CalendarEvent } from "./interfaces";
 import { z } from "zod";
 
 export interface GoogleCalendarConfig {
@@ -135,10 +135,20 @@ export function createGoogleCalendarClient(config: GoogleCalendarConfig, fetchIm
       return result;
     },
 
-    busyIntervals: async ({ from, to }) => {
-      const body = { timeMin: from, timeMax: to, items: [{ id: config.calendarId }] };
+    freeBusy: async ({ from, to, calendarIds }) => {
+      const body = { timeMin: from, timeMax: to, items: calendarIds.map((id) => ({ id })) };
       const result = await call("POST", `${config.baseUrl}/calendar/v3/freeBusy`, FreeBusyResponseSchema, "free/busy", body);
-      return mapResult(result, (r) => r.calendars[config.calendarId]?.busy ?? []);
+      return mapResult(result, (r) =>
+        Object.fromEntries(
+          calendarIds.map((id): [string, CalendarAvailability] => {
+            const entry = r.calendars[id];
+            if (entry === undefined) return [id, { busy: [], unavailableReason: "missing from response" }];
+            const reason = entry.errors?.[0]?.reason ?? null;
+            const busy = entry.busy.map((b) => ({ start: new Date(Date.parse(b.start)).toISOString(), end: new Date(Date.parse(b.end)).toISOString() }));
+            return [id, { busy, unavailableReason: reason }];
+          }),
+        ),
+      );
     },
   };
 }

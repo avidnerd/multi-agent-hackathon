@@ -102,6 +102,12 @@ export interface BusyInterval {
   readonly end: string;
 }
 
+export interface CalendarAvailability {
+  readonly busy: readonly BusyInterval[];
+  /** Set when the calendar is not shared with the organizer, so absence of busy blocks means "unknown", not "free". */
+  readonly unavailableReason: string | null;
+}
+
 export interface CalendarClient {
   createEvent(input: CalendarEventInput): Promise<Result<CalendarEvent>>;
   getEvent(eventId: string): Promise<Result<CalendarEvent>>;
@@ -109,5 +115,6 @@ export interface CalendarClient {
   moveEvent(eventId: string, change: { startsAt: string; endsAt: string; notifyAttendees: boolean }): Promise<Result<CalendarEvent>>;
   /** Succeeds if the event is already gone. */
   deleteEvent(eventId: string, options: { notifyAttendees: boolean }): Promise<Result<null>>;
-  busyIntervals(query: { from: string; to: string }): Promise<Result<BusyInterval[]>>;
+  /** Keyed by calendar id: "primary" for the organizer, a member's email for a calendar they shared. */
+  freeBusy(query: { from: string; to: string; calendarIds: readonly string[] }): Promise<Result<Record<string, CalendarAvailability>>>;
 }

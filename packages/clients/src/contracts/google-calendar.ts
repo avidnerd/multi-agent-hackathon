@@ -93,6 +93,14 @@ export const GoogleErrorBodySchema = z.object({
   }),
 });
 
+export const BusyBlockSchema = z.object({ start: z.string(), end: z.string() });
+
+/** Twin-only: a member shares their calendar's free/busy with the organizer, as done once in Google Calendar settings. */
+export const InjectedCalendarEventSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("member_calendar_shared"), email: z.email(), busy: z.array(BusyBlockSchema) }),
+]);
+export type InjectedCalendarEvent = z.infer<typeof InjectedCalendarEventSchema>;
+
 export const GoogleTokenResponseSchema = z.object({
   access_token: z.string().min(1),
   expires_in: z.number().positive(),

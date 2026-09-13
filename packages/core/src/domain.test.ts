@@ -58,6 +58,17 @@ describe("ConstraintSchema", () => {
     expect(issuesOf(ConstraintSchema.safeParse(inferred))).toContain("a inferred_from_market constraint must be soft");
   });
 
+  it("keeps a calendar busy block soft until the member confirms it", () => {
+    const busy = {
+      ...base,
+      kind: "date_exclusion",
+      value: { dates: ["2026-10-09"] },
+      provenance: { source: "calendar_busy", calendarId: "priya@example.com", busyStart: T0, busyEnd: T1 },
+    };
+    expect(ConstraintSchema.safeParse({ ...busy, hardness: "soft" }).success).toBe(true);
+    expect(issuesOf(ConstraintSchema.safeParse({ ...busy, hardness: "hard" }))).toContain("a calendar_busy constraint must be soft");
+  });
+
   it("does not let an inferred constraint carry raw member text", () => {
     const smuggled = {
       ...base,

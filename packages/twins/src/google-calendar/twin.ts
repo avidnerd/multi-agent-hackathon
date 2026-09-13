@@ -2,7 +2,9 @@ import type { Request, Response, Router } from "express";
 import { z } from "zod";
 import { IsoDateTimeSchema } from "@trip/core";
 import {
+  BusyBlockSchema,
   FreeBusyRequestSchema,
+  InjectedCalendarEventSchema,
   GoogleEventPatchSchema,
   GoogleEventSchema,
   GoogleEventWriteSchema,
@@ -22,6 +24,8 @@ export const CalendarStateSchema = z.object({
   events: z.array(GoogleEventSchema),
   /** Invite emails Google would have sent. Evidence for why calendar writes are classed irreversible. */
   notifications: z.array(NotificationSchema),
+  /** Other people's calendars shared with the organizer at free/busy level. Only busy blocks are visible, never titles. */
+  sharedCalendars: z.array(z.object({ email: z.email(), busy: z.array(BusyBlockSchema) })),
   counter: z.number().int().nonnegative(),
 });
 export type CalendarState = z.infer<typeof CalendarStateSchema>;
@@ -41,7 +45,7 @@ const GENERATED_ID_DIGITS = 10;
 const DEFAULT_MAX_RESULTS = 250;
 const MAX_RESULTS_LIMIT = 2500;
 
-const seed = (): CalendarState => ({ organizerEmail: "organizer@example.com", events: [], notifications: [], counter: 0 });
+const seed = (): CalendarState => ({ organizerEmail: "organizer@example.com", events: [], notifications: [], sharedCalendars: [], counter: 0 });
 
 const ListQuerySchema = z.object({
   timeMin: z.string().optional(),
@@ -204,17 +208,22 @@ function registerRoutes(router: Router, twin: TwinRuntime<CalendarState>): void 
     const minMs = toMs(timeMin, -Infinity);
     const maxMs = toMs(timeMax, Infinity);
     const state = twin.read(req);
-    // Only confirmed, opaque events make someone busy. Overlapping events merge into one busy block.
-    const busy = mergeIntervals(
-      state.events
-        .filter((e) => e.status !== "cancelled" && e.transparency !== "transparent")
-        .map((e): [number, number] => [Math.max(minMs, toMs(e.start.dateTime, 0)), Math.min(maxMs, toMs(e.end.dateTime, 0))])
-        .filter(([start, end]) => end > start),
-    ).map(([start, end]) => ({ start: new Date(start).toISOString(), end: new Date(end).toISOString() }));
+    // Blocks are clipped to the window and overlapping blocks merge, as Google reports them.
+    const clipAndMerge = (blocks: ReadonlyArray<{ start: string; end: string }>) =>
+      mergeIntervals(
+        blocks.map((b): [number, number] => [Math.max(minMs, toMs(b.start, 0)), Math.min(maxMs, toMs(b.end, 0))]).filter(([start, end]) => end > start),
+      ).map(([start, end]) => ({ start: new Date(start).toISOString(), end: new Date(end).toISOString() }));
+    // Only confirmed, opaque events make the organizer busy.
+    const organizerBusy = state.events
+      .filter((e) => e.status !== "cancelled" && e.transparency !== "transparent")
+      .map((e) => ({ start: e.start.dateTime, end: e.end.dateTime }));
     const calendars = Object.fromEntries(
-      items.map(({ id }) =>
-        id === "primary" || id === state.organizerEmail ? [id, { busy }] : [id, { busy: [], errors: [{ domain: "global", reason: "notFound" }] }],
-      ),
+      items.map(({ id }) => {
+        if (id === "primary" || id === state.organizerEmail) return [id, { busy: clipAndMerge(organizerBusy) }];
+        const shared = state.sharedCalendars.find((c) => c.email === id);
+        // Google answers an unshared calendar with an empty busy list plus a notFound error, not a 404.
+        return shared === undefined ? [id, { busy: [], errors: [{ domain: "global", reason: "notFound" }] }] : [id, { busy: clipAndMerge(shared.busy) }];
+      }),
     );
     res.json({ kind: "calendar#freeBusy", timeMin, timeMax, calendars });
   });
@@ -231,4 +240,13 @@ export const googleCalendarTwin: TwinDefinition<CalendarState> = {
     error: { code: status, message, errors: [{ domain: "global", reason: REASONS[code] ?? code, message }] },
   }),
   routes: registerRoutes,
+  injectEvent: (twin, raw) => {
+    const parsed = InjectedCalendarEventSchema.safeParse(raw);
+    if (!parsed.success) return { status: STATUS.badRequest, body: { error: { code: "invalid_request", message: parsed.error.message } } };
+    const { email, busy } = parsed.data;
+    twin.write((state) => {
+      state.sharedCalendars = [...state.sharedCalendars.filter((c) => c.email !== email), { email, busy }];
+    });
+    return { status: STATUS.ok, body: { applied: parsed.data.kind, email } };
+  },
 };

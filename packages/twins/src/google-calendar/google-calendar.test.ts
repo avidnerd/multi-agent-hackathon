@@ -56,8 +56,23 @@ describe("google calendar twin", () => {
     unwrap(await calendar.createEvent(hold({ idempotencyKey: "a", startsAt: "2026-10-09T15:00:00Z", endsAt: "2026-10-09T18:00:00Z" })));
     unwrap(await calendar.createEvent(hold({ idempotencyKey: "b", startsAt: "2026-10-09T17:00:00Z", endsAt: "2026-10-09T20:00:00Z" })));
     unwrap(await calendar.createEvent(hold({ idempotencyKey: "c", startsAt: "2026-10-10T15:00:00Z", endsAt: "2026-10-10T18:00:00Z", blocksTime: false })));
-    const busy = unwrap(await calendar.busyIntervals({ from: "2026-10-09T00:00:00Z", to: "2026-10-11T00:00:00Z" }));
-    expect(busy).toEqual([{ start: "2026-10-09T15:00:00.000Z", end: "2026-10-09T20:00:00.000Z" }]);
+    const availability = unwrap(await calendar.freeBusy({ from: "2026-10-09T00:00:00Z", to: "2026-10-11T00:00:00Z", calendarIds: ["primary"] }));
+    expect(availability.primary).toEqual({ busy: [{ start: "2026-10-09T15:00:00.000Z", end: "2026-10-09T20:00:00.000Z" }], unavailableReason: null });
+  });
+
+  it("reads a member's shared free/busy and marks an unshared calendar as unknown rather than free", async () => {
+    unwrap(
+      await control.injectEvent({
+        kind: "member_calendar_shared",
+        email: "priya@example.com",
+        busy: [{ start: "2026-10-08T16:00:00Z", end: "2026-10-10T02:00:00Z" }],
+      }),
+    );
+    const availability = unwrap(
+      await calendar.freeBusy({ from: "2026-10-09T00:00:00Z", to: "2026-10-12T00:00:00Z", calendarIds: ["priya@example.com", "dev@example.com"] }),
+    );
+    expect(availability["priya@example.com"]).toEqual({ busy: [{ start: "2026-10-09T00:00:00.000Z", end: "2026-10-10T02:00:00.000Z" }], unavailableReason: null });
+    expect(availability["dev@example.com"]).toEqual({ busy: [], unavailableReason: "notFound" });
   });
 
   it("moves an event, deletes it idempotently, and refuses to reuse a deleted event's key", async () => {
