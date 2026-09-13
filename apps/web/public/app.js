@@ -30,12 +30,17 @@ function renderChat(state) {
     $("chat").innerHTML = `<li class="empty">Nothing yet. Start planning and Concorde asks each person in the group what works for them.</li>`;
     return;
   }
-  $("chat").innerHTML = state.messages
+  const chat = $("chat");
+  const grew = chat.children.length !== state.messages.length;
+  chat.innerHTML = state.messages
     .map((m) => {
       const to = m.to === null ? "" : `<span class="to">to ${esc(m.to)}</span>`;
       return `<li class="message${m.from === "Concorde" ? " concorde" : ""}"><span class="from">${esc(m.from)}${to}</span><span class="body">${esc(m.body)}</span></li>`;
     })
     .join("");
+  // Keep the newest message in view, like the group chat itself.
+  const bay = chat.closest(".bay");
+  if (grew && bay !== null) bay.scrollTop = bay.scrollHeight;
 }
 
 function renderPlan(state) {

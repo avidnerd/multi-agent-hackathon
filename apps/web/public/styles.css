@@ -173,6 +173,10 @@ h2 {
   color: var(--paper);
 }
 
+.message.concorde .to {
+  color: #c3cad1;
+}
+
 .message .body {
   padding: 0.5rem 0.625rem;
   white-space: pre-wrap;
