@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CandidateOption, DateWindow } from "../domain";
-import { calendarBusy, excludeDates, member, said } from "./fixtures";
+import { budget, calendarBusy, excludeDates, member, said } from "./fixtures";
 import { computeFeasibleOptions } from "./options";
 import { identifyUnblockingQuestion, summarizeConvergence } from "./unblocking";
 
@@ -66,6 +66,12 @@ describe("identifyUnblockingQuestion", () => {
     const options = computeFeasibleOptions(members, WINDOW, flat);
     expect(identifyUnblockingQuestion(options, members)).toBeNull();
     expect(summarizeConvergence(options, members, null)).toBe("2 of 2 replied. Oct 9–11 works for everyone. Ready to lock it.");
+  });
+
+  it("names the budget, not the dates, when price alone rules out every option", () => {
+    const members = [member("priya", "Priya", { responseState: "complete", constraints: [budget("priya", "b1", 35_000)] }), member("dev", "Dev", { responseState: "asked" })];
+    const options = computeFeasibleOptions(members, WINDOW, flat);
+    expect(summarizeConvergence(options, members, null)).toBe("1 of 2 replied. Even the cheapest dates, Oct 9–11 at $500 a person, are over Priya's budget.");
   });
 
   it("does not waste a question on options a hard conflict already rules out", () => {

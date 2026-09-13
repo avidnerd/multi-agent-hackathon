@@ -35,13 +35,26 @@ export const runOsascript: AppleScriptRunner = (args, timeoutMs) =>
     });
   });
 
-/** Recipient and body travel as argv, never spliced into the script, so message text cannot become AppleScript. */
+/**
+ * Recipient and body travel as argv, never spliced into the script, so message text cannot become AppleScript.
+ * Accounts are walked one by one because some (Game Center, disabled RCS) throw when asked their service type,
+ * which makes a `whose service type = iMessage` filter fail outright.
+ */
 const SEND_SCRIPT = [
   "on run argv",
   "set targetHandle to item 1 of argv",
   "set messageText to item 2 of argv",
   'tell application "Messages"',
-  "set targetService to 1st account whose service type = iMessage",
+  "set targetService to missing value",
+  "repeat with candidate in accounts",
+  "try",
+  "if service type of candidate is iMessage and enabled of candidate then",
+  "set targetService to candidate",
+  "exit repeat",
+  "end if",
+  "end try",
+  "end repeat",
+  'if targetService is missing value then error "No enabled iMessage account in Messages"',
   "set targetBuddy to participant targetHandle of targetService",
   "send messageText to targetBuddy",
   "end tell",

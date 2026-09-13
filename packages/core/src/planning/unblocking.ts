@@ -1,5 +1,5 @@
 import type { CandidateOption, Constraint, Member } from "../domain";
-import { formatDate, formatDateRange, joinNames } from "./format";
+import { formatDate, formatDateRange, formatDollars, joinNames } from "./format";
 import { isLockable, isViable } from "./options";
 
 /** Beyond the top few options the group will not pick anyway, so their blockers are not worth a text. */
@@ -110,13 +110,29 @@ export function identifyUnblockingQuestion(options: readonly CandidateOption[], 
   };
 }
 
+/**
+ * Why nothing is viable, in terms the organizer can act on. When price alone rules out even the cheapest
+ * dates, "no dates work" would send them hunting through calendars for a problem that is really a budget.
+ */
+function describeDeadlock(options: readonly CandidateOption[], members: readonly Member[]): string {
+  const cheapest = [...options].sort((a, b) => a.costPerPersonCents - b.costPerPersonCents)[0];
+  if (cheapest === undefined) return "No dates in the window have prices yet.";
+  const hardKinds = cheapest.blockedBy
+    .filter((b) => b.reason === "constraint_conflict")
+    .map((b) => ({ member: members.find((m) => m.id === b.memberId), constraint: members.find((m) => m.id === b.memberId)?.constraints.find((c) => c.id === b.constraintId) }));
+  const budgetOnly = hardKinds.length > 0 && hardKinds.every((h) => h.constraint?.kind === "budget_ceiling");
+  if (!budgetOnly) return "No dates in the window work for everyone who has answered.";
+  const names = joinNames([...new Set(hardKinds.map((h) => h.member?.name ?? "someone"))]);
+  return `Even the cheapest dates, ${formatDateRange(cheapest.startDate, cheapest.endDate)} at ${formatDollars(cheapest.costPerPersonCents)} a person, are over ${names}'s budget.`;
+}
+
 /** The group-level status line, e.g. "2 of 4 replied. I can lock Oct 9–11 if Dev confirms." */
 export function summarizeConvergence(options: readonly CandidateOption[], members: readonly Member[], question: UnblockingQuestion | null): string {
   const active = members.filter((m) => !m.optedOut);
   const replied = active.filter((m) => m.responseState === "partial" || m.responseState === "complete").length;
   const heard = `${replied} of ${active.length} replied.`;
   const best = options.find(isViable);
-  if (best === undefined) return `${heard} No dates in the window work for everyone who has answered.`;
+  if (best === undefined) return `${heard} ${describeDeadlock(options, members)}`;
   const range = formatDateRange(best.startDate, best.endDate);
   if (isLockable(best)) return `${heard} ${range} works for everyone. Ready to lock it.`;
   const asked = members.find((m) => m.id === question?.memberId);
