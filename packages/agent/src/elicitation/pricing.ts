@@ -12,6 +12,7 @@ export interface PricingInput {
 }
 
 const GUESTS_PER_ROOM = 2;
+export const roomsFor = (guests: number): number => Math.ceil(guests / GUESTS_PER_ROOM);
 
 const cheapest = <T>(items: readonly T[], price: (item: T) => number): T | undefined =>
   [...items].sort((a, b) => price(a) - price(b))[0];

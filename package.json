@@ -13,6 +13,7 @@
     "twins": "pnpm --filter @trip/twins start",
     "elicit:demo": "pnpm --filter @trip/agent elicit:demo",
     "imessage:live": "pnpm --filter @trip/agent imessage:live",
+    "book:demo": "pnpm --filter @trip/agent book:demo",
     "db:migrate": "pnpm --filter @trip/db migrate",
     "db:generate": "pnpm --filter @trip/db generate"
   },

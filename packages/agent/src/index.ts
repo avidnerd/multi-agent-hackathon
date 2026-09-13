@@ -1,3 +1,6 @@
+export * from "./booking/actions";
+export * from "./booking/agent";
+export * from "./booking/selection";
 export * from "./dispatcher";
 export * from "./elicitation/agent";
 export * from "./elicitation/extraction";
