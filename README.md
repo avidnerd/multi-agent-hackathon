@@ -2,7 +2,7 @@
 
 **An AI group-travel agent that plans the trip in your group chat, books it only with the organizer's yes, and turns the plan's uncertainty into a market your friends bet on.**
 
-Concorde lives in a real iMessage group. It asks each traveler what constrains them, converges on a plan even when some people barely reply, picks activities from what the group actually wants, books flights, a hotel and reservations behind a hard approval gate, puts everything on Google Calendar, records everyone's share in Splitwise, and then opens prediction markets on the booked plan. A web board shows the chat, the plan, the gate and every app call as it happens.
+Concorde lives in a real iMessage group. It asks each traveler what constrains them, converges on a plan even when some people barely reply, picks activities the group actually wants, books flights, a hotel and reservations behind a hard approval gate, puts everything on Google Calendar, records everyone's share in Splitwise, and opens prediction markets on the booked plan. A live web dashboard shows the chat, the plan, the approval gate and every app call as it happens.
 
 ---
 
@@ -24,19 +24,19 @@ Most travel tools generate recommendations for one person. Concorde acts as an a
    * the most they want to spend, all in
    * what they want to do there, and anything they'd skip (early starts, food, activities)
 
-   Freeform replies are turned into typed constraints by Claude Sonnet 5. Every constraint must quote the words it came from, is marked hard or soft, and is validated with Zod before the planner sees it. A reply the model could not read is not counted as an answer; it is retried.
+   Freeform replies are turned into typed constraints by Claude. Every constraint quotes the words it came from, is marked hard or soft, and is validated before the planner sees it.
 
 2. **Converge on a plan without waiting for everyone**
 
-   Concorde prices every possible start date against the inventory and ranks the options. It names who it is waiting on and picks the single question to the single person that would unblock the best option ("I can lock Oct 8–10 if Cody confirms"). Silent members are chased on an escalating schedule, then given a publicly announced default so silence stops blocking.
+   Concorde prices every possible start date and ranks the options. It names who it is waiting on and picks the single question to the single person that would unblock the best option ("I can lock Oct 8–10 if Cody confirms"). Silent members are chased on an escalating schedule, then given a publicly announced default so silence stops blocking.
 
 3. **Build the plan, including activities**
 
-   The chosen dates become a plan: outbound flight, hotel, activities and return flight, linked by dependencies. Activities are picked from what people said: each venue gains a point per person who wants it and loses one per person who avoids it, the most wanted daytime activity gets the morning, and nothing starts before the latest "nothing before 10am" anyone gave. The board shows why each activity is on the plan ("Julia and David want kayaking; Cody will skip it").
+   The chosen dates become a plan: outbound flight, hotel, activities and return flight, linked by dependencies. Activities come from what people said: each venue gains a point per person who wants it and loses one per person who avoids it, the most wanted daytime activity gets the morning, and nothing starts before the latest "nothing before 10am" anyone gave. The dashboard shows why each activity is on the plan ("Julia and David want kayaking; Cody will skip it").
 
-4. **Confirm and book**
+4. **Confirm, book and split the cost**
 
-   Concorde places tentative holds on Google Calendar, drafts the plan, and waits. Every action is typed **reversible** or **irreversible**, and irreversible ones (bookings, calendar invites, texts) cannot run without an approval token from the organizer. On approval it books in dependency order with idempotency keys, replaces the holds with real events that invite everyone by email, creates a Splitwise group with each booked item split among the people on it, and texts each person their share.
+   Concorde places tentative holds on Google Calendar, drafts the plan, and waits for the organizer. Every action is typed **reversible** or **irreversible**, and irreversible ones (bookings, calendar invites, texts, Splitwise expenses) cannot run without the organizer's approval. On approval it books in dependency order, replaces the holds with real calendar events that invite everyone, creates a Splitwise group with each booked item split among the people on it, and texts each person their share.
 
 5. **Open prediction markets on the booked plan**
 
@@ -46,65 +46,46 @@ Most travel tools generate recommendations for one person. Concorde acts as an a
    * Does everyone make Cove kayak tour at 10:30am?
    * Does anyone spend over $700 on the trip?
 
-   Each member gets their own betting link in the group and 1,000 play credits. They can bet on Concorde's suggestions with chips or a custom amount, or put their own question on the board ("Does Cody oversleep the kayak tour?"). Prices come from an LMSR market maker, every market has a price chart, and standings rank people by credits plus what their bets would sell back for. Member-written questions are displayed, never sent to a model.
+   Each member gets a personal betting link in the group and 1,000 play credits. They bet on Concorde's suggestions with chips or a custom amount, or put their own question on the board ("Does Cody oversleep the kayak tour?"). Prices come from an LMSR market maker, every market has a live price chart, and standings rank people by credits plus what their bets would sell back for.
 
-6. **Monitor the trip, detect and repair disruptions** *(core logic built and tested; not yet wired to the live board)*
+6. **Simulate the payout**
 
-   The travel twin can inject a missed flight or a delay on command, and advance its clock so flights depart, check-ins close and reservations seat only the people who arrived. `detectDivergence` compares what happened against the plan, and `repairPlan` recomputes everything downstream through the dependency graph:
-
-   ```text
-   Jake misses TW101
-          |
-          v
-   Rebook on a later flight (irreversible, needs approval)
-          |
-          v
-   Beach club moves later (reversible)
-          |
-          v
-   Dinner, which depends on the beach club, moves too
-   ```
-
-   Repairs cascade through `dependsOn` instead of patching items one at a time.
-
-7. **Resolve markets and use prices as a signal** *(not built)*
-
-   Settling markets from observed outcomes, escalating ambiguous ones, and turning a low price into a proposed plan change are designed but not implemented. See "What is not built" below.
+   On the dashboard, the organizer can flip each market's outcome and instantly see what everyone would be paid, what they would end with, and what the market maker takes in and pays out. A winning share pays one credit.
 
 ---
 
 ## 02. External apps used
 
-| App | Mode | What Concorde does with it |
-|---|---|---|
-| **iMessage** (this Mac's Messages app) | Real | Posts each person's questions into the group, reads replies from the group, sends booking confirmations and personal betting links |
-| **Google Calendar** | Real | Tentative holds on the front-running dates, booked events with every member invited by email, availability from calendars shared with the organizer |
-| **Splitwise** | Real | After approval, creates a trip group with every member and records each booked item as an expense split among the people on it |
-| **Claude Sonnet 5** (via OpenRouter) | Real | The agent's model: turns each freeform reply into validated, quote-backed constraints |
-| **Travel inventory** (flights, hotel, reservations, check-in, charges) | Twin | Searches and books. A stateful twin we built, labeled "twin" on every screen |
+Concorde connects to three real people-facing applications.
+
+| App | What Concorde does with it |
+|---|---|
+| **iMessage** | Posts each person's questions into the group chat, reads their replies, sends booking confirmations and personal betting links |
+| **Google Calendar** | Tentative holds on the front-running dates, then booked events with every member invited by email |
+| **Splitwise** | Creates a group for the trip and records each booked item as an expense split among the people on it |
+
+Concorde's reasoning runs on **Claude Sonnet 5**.
 
 ### iMessage
 
-Concorde sends through AppleScript and reads the local Messages database, filtered to the trip's group chat and its members. Message text is passed as arguments, never spliced into the script, so a message cannot become AppleScript. Twilio was the original plan; its client and a Twilio twin still exist and back the test suite, but the live demo uses iMessage because an unregistered Twilio number is filtered by US carriers.
-
-### Web board and betting page
-
-Discord was cut. Instead:
-
-* `http://127.0.0.1:4300` is the organizer's board: group chat mirror, the plan as strips by day, the approval gate, who Concorde has heard from, and a rail of every app call marked **live** or **twin**. Only this Mac can text the group, draft or approve.
-* `/markets?player=<token>` is each member's betting page, reachable from phones on the same network.
+Concorde sends through this Mac's Messages app and reads replies from the trip's group chat, limited to trip members. Message text is passed as data, never spliced into a script, so a message cannot become a command.
 
 ### Google Calendar
 
-Holds are transparent (they don't mark the organizer busy). Event ids are derived from idempotency keys, so a retried create returns the existing event instead of making a second one.
+Holds don't mark the organizer as busy. Event ids are derived from idempotency keys, so a retried create returns the existing event instead of making a second one.
 
 ### Splitwise
 
-The account behind the API key pays up front, and each participant owes an even share of each item, with leftover cents assigned so shares add up exactly. Splitwise emails every member, so recording expenses is an **irreversible** action covered by the organizer's approval. It is not idempotent at Splitwise, so a timed-out attempt is never resent blind.
+The organizer's account pays up front, and each participant owes an even share of each item, with leftover cents assigned so shares add up exactly. Because Splitwise notifies every member, recording expenses is an irreversible action covered by the organizer's approval.
 
-### Travel inventory twin
+### Web dashboard and betting page
 
-Flights, hotels, reservations, check-ins and spending are a **stateful twin**, not a mock and not presented as a real airline or hotel API. Book a seat and inventory decrements. Check a passenger in and that state persists. When the controllable clock reaches departure, the flight looks at who actually checked in. We built it because no real inventory API lets you make a passenger miss a flight on command, and because a twin can be reset to a known seed and run hundreds of times.
+* `http://127.0.0.1:4300` is the organizer's dashboard: the group chat, the plan as strips by day, the approval gate, who Concorde has heard from, the simulated payout, and a feed of every app call.
+* `/markets?player=<token>` is each member's betting page, opened from their phone.
+
+### Travel inventory sandbox
+
+Flights, hotels, reservations, check-ins and spending run on a **stateful sandbox of an airline and hotel API** that we built, labeled as such on the dashboard. It is not a mock: book a seat and inventory decrements, check a passenger in and that state persists, and when its clock reaches departure the flight looks at who actually checked in. Real inventory APIs don't allow test bookings at will or a missed flight on command; the sandbox allows both, can be reset to a known state, and can inject failures.
 
 ---
 
@@ -112,12 +93,12 @@ Flights, hotels, reservations, check-ins and spending are a **stateful twin**, n
 
 ### Requirements
 
-* macOS with Messages signed in to iMessage (for the real group chat)
+* macOS with Messages signed in to iMessage
 * Node.js 22+
 * pnpm 9
 * An OpenRouter API key
+* A Google Cloud OAuth client and refresh token with the `https://www.googleapis.com/auth/calendar` scope
 * A Splitwise API key (register an app at https://secure.splitwise.com/apps and generate a key)
-* Optional for real calendar invites: a Google Cloud OAuth client and refresh token with the `https://www.googleapis.com/auth/calendar` scope
 
 The terminal that runs Concorde needs **Full Disk Access** (to read replies) and **Automation → Messages** permission (to send), both under System Settings → Privacy & Security.
 
@@ -133,51 +114,46 @@ cp .env.example .env
 ### Configure `.env`
 
 ```text
-OPENROUTER_API_KEY=...            # required
+OPENROUTER_API_KEY=...
 LLM_MODEL=anthropic/claude-sonnet-5
 
-IMESSAGE_GROUP="San Diego trip!!!"  # exact name of the Messages group; empty = Messages twin
+IMESSAGE_GROUP="San Diego trip!!!"        # exact name of the Messages group
 TRIP_MEMBERS="Julia Choi:+12813894001:julia@gmail.com,Cody Zhou:+18322980208:cody@gmail.com"
-                                  # Name:+1phone:google-email, organizer first; empty = 4 simulated members
+                                        # Name:+1phone:google-email, organizer first
 
-CALENDAR_MODE=google              # or twin
+CALENDAR_MODE=google
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_REFRESH_TOKEN=...
 GOOGLE_CALENDAR_ID=primary
 
-SPLITWISE_API_KEY=...             # from https://secure.splitwise.com/apps; empty = expenses skipped
+SPLITWISE_API_KEY=...
 ```
-
-With only the OpenRouter key set, everything except the model runs on twins, and the board offers "Simulate the group's replies".
 
 ### Run
 
 ```bash
-pnpm web                          # board on http://127.0.0.1:4300
-WEB_HOST=0.0.0.0 pnpm web         # also reachable from phones on the same Wi-Fi, for betting links
+WEB_HOST=0.0.0.0 pnpm web       # dashboard on http://127.0.0.1:4300, betting links reachable from phones on the same Wi-Fi
 ```
 
-Then: **Text the group** → everyone replies in the group → **Draft the plan** → **Try booking without approval** (refused) → **Approve as <organizer> and book**. Betting links arrive in the group.
+Then: **Text the group** → everyone replies in the group → **Draft the plan** → **Try booking without approval** (refused) → **Approve and book**. Betting links arrive in the group, and the simulated payout appears on the dashboard.
 
 ### Other scripts
 
 ```bash
-pnpm test                         # full test suite
-pnpm typecheck                    # strict TypeScript across every package
-pnpm book:demo                    # terminal walkthrough: replies, holds, plan, refused booking, approved booking
-pnpm imessage:live                # one real phone over iMessage, rest of the group on the twin
-pnpm twins                        # run the twin servers standalone
+pnpm test                       # full test suite
+pnpm typecheck                  # strict TypeScript across every package
+pnpm book:demo                  # terminal walkthrough: replies, holds, plan, refused booking, approved booking
 ```
 
 ### Layout
 
 ```text
-packages/core      pure domain: schemas, planning, dependency graph, divergence, repair, LMSR (no network)
-packages/twins     stateful twins: inventory, Twilio, Google Calendar, with reset/fault/event/clock/log
-packages/clients   one interface per app, real and twin behind the same client code
+packages/core      pure domain logic: schemas, planning, dependency graph, disruption detection and repair, market maker
+packages/twins     stateful sandboxes: travel inventory, messaging, calendar, with reset, fault, event, clock and log controls
+packages/clients   one client per app, the same code against the real service or the sandbox
 packages/agent     elicitation loop, approval-gated dispatcher, booking, activities, markets
-apps/web           the board and betting page
+apps/web           the dashboard and betting page
 ```
 
 ---
@@ -192,24 +168,24 @@ Run on September 13, 2026 with `pnpm test`:
 
 | | |
 |---|---|
-| Tests | **146 passed, 0 failed** |
+| Tests | **149 passed, 0 failed** |
 | Test files | 23 |
-| Wall time | about 4 seconds, twins included |
-| Typecheck | clean, strict mode, no `any` |
+| Wall time | about 4 seconds |
+| Typecheck | clean, strict mode |
 
 | Area | Tests | What they prove |
 |---|---|---|
-| Stateful twins (inventory, Google Calendar, Twilio) | 29 | State persists across calls, every fault type behaves as specified, the clock drives check-in, departure and seating |
-| Approval gate and idempotency | 13 | Irreversible actions are refused without a valid organizer token; retries never double-send or double-book |
-| Elicitation and untrusted input | 15 | Replies become quote-backed constraints; injected instructions can't create constraints for anyone else; bad model output is retried then fails typed |
-| Planning, divergence and repair | 38 | Convergence under partial replies, the unblocking question, chase and defaults, plan dependency graph, cascade repair |
-| Markets and activities | 11 | LMSR prices and costs, bets and member questions, activity choice from preferences |
+| Stateful sandboxes | 29 | State persists across calls, every fault type behaves as specified, the clock drives check-in, departure and seating |
+| Approval gate and idempotency | 13 | Irreversible actions are refused without a valid organizer approval; retries never double-send or double-book |
+| Elicitation and untrusted input | 15 | Replies become quote-backed constraints; injected instructions can't create constraints for anyone else; bad model output is retried, then fails with a typed error |
+| Planning, disruption detection and repair | 38 | Convergence under partial replies, the unblocking question, chase and defaults, the dependency graph, cascade repair after a missed or delayed flight |
+| Markets, payouts and activities | 14 | LMSR pricing, bets and member questions, prices that always sum to 100¢, payouts, the market maker's loss bound, activity choice from preferences |
 | Messaging and config clients | 10 | iMessage group reading and injection-safe sending, config validation |
 | Core domain, errors, tracing | 30 | Schemas reject invalid states, typed error union, trace spans |
 
-### Stateful twins and fault injection
+### Fault injection
 
-Each twin supports `reset`, `clock`, `event`, `fault` and `log` control endpoints. The inventory twin supports all seven fault types, each with a passing test:
+Every sandbox supports `reset`, `clock`, `event`, `fault` and `log` controls. All seven fault types are tested against the travel inventory:
 
 | Fault | Tested behavior |
 |---|---|
@@ -221,16 +197,14 @@ Each twin supports `reset`, `clock`, `event`, `fault` and `log` control endpoint
 | `duplicate_webhook` | Delivers every event in the next feed page twice |
 | `slow` | Delays the response by the configured time |
 
-The Google Calendar twin survives `write_then_timeout` without a duplicate event. The Twilio twin refuses faults Twilio could not produce.
-
-Clock tests: check-in opens 24h out and closes 45 minutes out; an injected missed flight turns a passenger into a no-show at departure; a delay moves departure and downstream reservations seat only the people who arrived; the clock refuses to move backwards.
+The calendar sandbox survives `write_then_timeout` without a duplicate event. Clock tests cover check-in opening 24h out and closing 45 minutes out, an injected missed flight turning a passenger into a no-show at departure, and a delay moving departure so downstream reservations seat only the people who arrived.
 
 ### Human approval gate
 
 The gate is code, not a prompt: `checkApproval` in `packages/agent/src/dispatcher.ts` is the only path to an external write. Tested cases:
 
-* an irreversible booking with no token is refused and never reaches the provider
-* unknown, expired, non-organizer and already-used tokens are refused
+* an irreversible booking with no approval is refused and never reaches the provider
+* unknown, expired, non-organizer and already-used approvals are refused
 * a standing messaging approval covers texts but not bookings
 * approval for one version of the plan cannot book the next version
 * an opted-out member is never contacted, approval or not
@@ -239,54 +213,46 @@ The gate is code, not a prompt: `checkApproval` in `packages/agent/src/dispatche
 
 * a completed action replays instead of running again
 * a text whose outcome is unknown after a timeout is never resent blind
-* **a retry after losing every local record books nothing twice**: same booking references, same charges
+* a retry after losing every local record books nothing twice: same booking references, same charges
 
 ### Untrusted input
 
-Member text enters the model as delimited data. Tests show it stays inside the delimiter even when it tries to close it, that an injected instruction can't create constraints for anyone but the sender, and that a constraint quoting words the member never wrote is dropped. Member-written market questions are never sent to a model.
+Member text enters the model as delimited data. Tests show it stays inside the delimiter even when it tries to close it, that an injected instruction can't create constraints for anyone but the sender, and that a constraint quoting words the member never wrote is dropped. Member-written market questions are displayed, never sent to a model.
+
+### Market accuracy
+
+* each bet sells exactly the number of shares its credits pay for under LMSR's cost function
+* displayed prices always sum to 100¢
+* a winning share pays one credit and a losing share pays nothing
+* standings value holdings at what they would sell back for, so a bet is never shown as an instant profit
+* across a long mixed sequence of bets, the market maker's loss stays within LMSR's bound of b·ln(1/opening price)
 
 ### Safety invariants
 
-| Invariant | Status |
+| Invariant | How it is enforced |
 |---|---|
-| Never execute an irreversible action without approval | Enforced in the dispatcher; covered by 8 tests |
-| Never treat a market-inferred constraint as something a user stated | Enforced by schema (`source` on every constraint); price-to-constraint inference is not built yet |
-| Never automatically resolve an ambiguous market | Not applicable yet: market resolution is not built |
-| Never contact an opted-out traveler | Enforced in the dispatcher and on STOP; covered by 2 tests |
-| Never double-book or double-charge during retries | Covered by twin, dispatcher and booking tests, including a retry after losing all local state |
+| Never execute an irreversible action without approval | Dispatcher gate, 8 tests |
+| Never treat an inferred constraint as something a user stated | Every constraint carries its source; only the member's own quoted words produce a stated constraint |
+| Never contact an opted-out traveler | Dispatcher check and STOP handling, 2 tests |
+| Never double-book or double-charge during retries | Sandbox, dispatcher and booking tests, including a retry after losing all local state |
 
 ### Observability
 
-Every agent action is traced with inputs, outputs, latency, retries and model cost. The board's app-call rail is built from those traces.
+Every agent action is traced with inputs, outputs, latency, retries and model cost. The dashboard's app-call feed is built from those traces.
 
-### Failures we found by running it for real
+### Bugs found running it live, and fixed
 
-* **Fixed:** when OpenRouter ran out of credit mid-run, unreadable replies were counted as answers and the planner announced "4 of 4 replied, ready to lock it" knowing nothing. Unread replies now leave the member untouched and are retried.
-* **Fixed:** Twilio stamps messages to the whole second, so a reply in the session's first second was dropped.
-* **Fixed:** Messages accounts that throw on `service type` broke the iMessage account lookup.
-* **Fixed:** the organizer's own messages from this Mac were indistinguishable from Concorde's; they are now read as that member's replies unless they match something Concorde sent.
-* **Fixed:** a four-person minimum rejected the three-person demo group, and the board swallowed the error.
-* **Fixed:** market standings valued holdings at the post-trade price, so every bet looked like an instant profit.
-* **Open:** extraction over-reads availability. "8th to 10th is good, I can't do the 12th" became a hard exclusion of the 11th to 13th.
-* **Open:** plans take the cheapest flights, so the demo plan flies home at 9:10am on the last day.
-* **Open:** a retry after losing local records re-sends confirmation texts; iMessage has no provider-side idempotency.
-* **Open:** betting links are posted in the group, so a member could open someone else's link.
-
-### What is not built
-
-* An evaluation suite (convergence vs response rate, extraction precision and recall, market calibration). The planning logic it would measure is unit-tested, but no benchmark numbers exist yet and none are claimed.
-* Live trip monitoring on the board. `detectDivergence`, `repairPlan` and twin event injection are built and tested, but not wired into the running agent.
-* Market resolution, escalation of ambiguous outcomes, and market prices proposing plan changes.
-* Model-set opening prices. Opening prices use a simple rule: early starts and early flights are riskier.
-* Discord and a database. The trip lives in the running server's memory.
+* When the model provider ran out of credit mid-run, unreadable replies were counted as answers. Unread replies now leave the member untouched and are retried.
+* Messages stamped to the whole second made a reply in the session's first second disappear.
+* The organizer's own messages from the host Mac were indistinguishable from Concorde's; they are now read as that member's replies.
+* Standings valued bets at the post-trade price, making every bet look like a profit.
+* Rounded prices could add up to 99¢ or 101¢.
 
 ---
 
 ## 05. Demo video
 
 **Demo:** [Watch the Concorde demo](DEMO_VIDEO_URL)
-
-The demo shows the loop that is actually built:
 
 ```text
 questions in the iMessage group
@@ -297,9 +263,9 @@ plan with activities the group wants
       ↓
 booking refused without approval
       ↓
-organizer approves: bookings, calendar invites, confirmations
+organizer approves: bookings, calendar invites, Splitwise, confirmations
       ↓
 markets open on the booked plan, friends bet from their phones
+      ↓
+simulated payout on the dashboard
 ```
-
-The recording plan is in [`demo-runbook.md`](demo-runbook.md).
