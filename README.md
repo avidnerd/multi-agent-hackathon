@@ -1,409 +1,446 @@
 # Concorde
 
-Concorde is a multi-app AI agent for group travel planning that coordinates people, creates a shared trip plan, monitors the trip once it starts, adapts when reality changes, and turns uncertain moments into social prediction markets.
+**An AI group-travel agent that plans the trip, predicts the chaos, and adapts when reality changes.**
 
-Instead of stopping after generating a schedule, Concorde stays active throughout the trip. It gathers constraints from the group, converges on a feasible plan even when some members do not respond, creates prediction markets from uncertain parts of the plan, observes real-world events, resolves markets from ground truth, and replans when disruptions occur.
+Concorde coordinates a group trip from planning through execution. It gathers each traveler's preferences and restrictions, creates a feasible shared plan, generates prediction markets around uncertain moments, monitors what actually happens during the trip, and replans when something goes wrong.
 
-## Core capabilities
+---
 
-- Collects travel preferences and constraints from group members through private messaging
-- Handles partial responses and follows up with non-responders
-- Produces a feasible group travel plan from dates, budgets, timing, and user restrictions
-- Requires explicit approval before irreversible actions
-- Generates prediction markets from uncertain points in the plan
-- Lets friends place bets through Discord
-- Uses market prices as additional signals without overriding stated preferences
-- Monitors trip state once travel begins
-- Detects when reality diverges from the plan
-- Recomputes downstream plans after disruptions
-- Resolves markets from observed ground truth
-- Creates new markets when replanning introduces new uncertainty
-- Maintains a leaderboard across the trip
+## 01. Project overview
 
-## Example markets
+Planning a group trip is difficult because everyone's constraints are different.
 
-Markets are generated automatically from the current plan rather than created manually.
+One person has a strict budget. Another cannot travel on Friday. Someone does not want an early flight. Someone else simply never responds.
 
-Examples include:
+Most travel tools generate recommendations for one person. Concorde acts as an agent for the entire group.
 
-- Will everyone make the flight?
-- Will the group spend more than $1,000 on food?
-- Will the group make the 10:30 AM reservation?
-- Which activity will receive the highest group rating?
-- Will a specific friend be late?
-- Will the group exceed a planned category budget?
+### How it works
 
-The prediction market is designed as a social layer on top of the planning agent. Friends often possess information about each other's behavior that a planning model does not.
+1. **Collect constraints**
 
-## How it works
+   Concorde contacts group members individually and collects information such as:
+
+   * availability
+   * budget
+   * timing preferences
+   * dietary restrictions
+   * activity preferences
+   * hard requirements
+
+   Freeform responses are converted into structured constraints that the planner can reason over.
+
+2. **Converge on a plan**
+
+   Concorde finds options that satisfy the group's constraints.
+
+   It does not require everyone to respond before making progress. If information is missing, the agent identifies the person and question that would reduce the most uncertainty.
+
+3. **Confirm and book**
+
+   Once a plan is selected, Concorde can create calendar events and interact with travel inventory.
+
+   Actions with irreversible consequences require explicit human approval before execution.
+
+4. **Create prediction markets**
+
+   Concorde analyzes the plan and automatically identifies uncertain events.
+
+   Example markets:
+
+   * Will Jake make the 8:00 AM flight?
+   * Will the group spend more than $1,000 on food?
+   * Will we make the 10:30 AM beach reservation?
+   * Which activity will receive the highest group rating?
+
+   Friends can trade on these markets using virtual currency.
+
+5. **Use the group as an information source**
+
+   Market prices can reveal information the planning agent does not know.
+
+   If the group heavily bets that nobody will make a 10:30 AM reservation, Concorde can treat that as an inferred signal and propose moving the activity later.
+
+   Market-derived information never silently overrides a preference explicitly stated by a traveler.
+
+6. **Monitor the trip**
+
+   Once the trip begins, Concorde watches real-world state such as:
+
+   * check-ins
+   * departures
+   * arrivals
+   * reservations
+   * spending
+
+7. **Detect and repair disruptions**
+
+   If reality diverges from the plan, Concorde detects the disruption and recomputes the affected portion of the trip.
+
+   For example:
+
+   ```text
+   Jake misses flight
+          |
+          v
+   New flight required
+          |
+          v
+   Arrival time changes
+          |
+          v
+   Dinner becomes infeasible
+          |
+          v
+   Concorde proposes a repaired plan
+   ```
+
+   Because plan items contain dependencies, repairs propagate through affected downstream events instead of changing one event in isolation.
+
+8. **Resolve and regenerate markets**
+
+   Prediction markets resolve from observed ground truth.
+
+   A missed flight can resolve one market while simultaneously creating new uncertainty:
+
+   > Will Jake make the rescheduled dinner?
+
+   Concorde can then automatically create a new market around the repaired plan.
+
+---
+
+## 02. External apps used
+
+Concorde connects to three real people-facing applications.
+
+### Twilio
+
+Used for direct communication with travelers.
+
+Concorde uses SMS to:
+
+* collect preferences and restrictions
+* follow up with non-responders
+* ask clarification questions
+* notify travelers when plans change
+
+### Discord
+
+Used as the social prediction-market interface.
+
+The Discord integration supports:
+
+* posting new markets
+* accepting bets
+* announcing resolutions
+* displaying the group leaderboard
+
+Example:
 
 ```text
-Group preferences and constraints
-            |
-            v
-     Constraint elicitation
-            |
-            v
-   Feasible option generation
-            |
-            v
-        Group plan
-            |
-            v
-      Confirmation gate
-            |
-            v
-        Booking layer
-            |
-            v
-     Market generation
-            |
-            v
-     Friends place bets
-            |
-            v
-      Live monitoring
-            |
-            v
-    Ground-truth events
-            |
-     +------+------+
-     |             |
-     v             v
-Market resolution  Divergence detection
-                         |
-                         v
-                    Plan repair
-                         |
-                         v
-                  New uncertainty
-                         |
-                         v
-                   New markets
+/bet jake-flight NO 500
 ```
 
-## Architecture
+### Google Calendar
 
-Concorde separates the system into two layers.
+Used to connect the plan to travelers' actual schedules.
 
-### People layer
+Concorde uses Google Calendar to:
 
-The people-facing layer uses real integrations where the product interacts directly with users.
+* create temporary candidate holds
+* create confirmed trip events
+* update events after replanning
 
-| Integration | Purpose |
-|---|---|
-| Twilio SMS | Preference collection, follow-ups, and disruption notifications |
-| Discord | Prediction markets, bets, resolutions, and leaderboard |
-| Google Calendar | Candidate holds, confirmed plan events, and plan updates |
+### Travel inventory twins
 
-### Inventory layer
+Flights, hotels, reservations, check-ins, and spending are represented using **stateful API twins**.
 
-Travel inventory is represented using stateful API twins for flights, hotels, reservations, check-in state, and spending.
+These are intentionally not presented as real airline or hotel APIs.
 
-These are not static mocks. Each twin maintains state, so later actions observe the consequences of earlier actions. For example, a booking changes available inventory, a check-in changes passenger state, and a departure consults that state.
+Unlike simple mocks, the twins maintain state. If Concorde books a seat, available inventory changes. If a passenger checks in, that state persists. When the simulated clock reaches departure, the flight evaluates the passengers' current check-in state.
 
-The inventory layer is twinned because production airline and hotel inventory APIs are difficult to provision for a short hackathon build, while the demo and evaluation suite require reproducible disruptions such as missed flights, stale reads, timeouts, and duplicate events.
+This lets us safely and reproducibly test scenarios that would be difficult or impossible to trigger with production travel APIs.
 
-## Agent lifecycle
+---
 
-The agent is implemented as a sequence of typed, independently testable steps rather than one large prompt.
+## 03. Setup instructions
 
-### Before the trip
+### Requirements
 
-1. **Intake** - create the trip skeleton from organizer input
-2. **Elicit** - ask members for constraints through private SMS
-3. **Chase** - follow up with non-responders
-4. **Converge** - compute feasible options under partial information
-5. **Plan** - convert the selected option into a dependency-aware plan
-6. **Confirm** - require organizer approval before irreversible actions
-7. **Book** - execute inventory writes with idempotency protection
-8. **Generate markets** - identify uncertain parts of the plan
-9. **Read prices** - convert closing market prices into inferred constraints when useful
+Install:
 
-### During the trip
+* Node.js
+* pnpm
+* Git
 
-10. **Monitor** - observe state changes from external systems
-11. **Detect** - compare observed state against expected state
-12. **Repair** - recompute all affected downstream plan items
-13. **Notify** - update affected members
-14. **Resolve** - settle markets from observed ground truth
-15. **Regenerate** - create new markets from new uncertainty
+You will also need credentials for the real external integrations you want to enable:
 
-## Constraint handling
+* Twilio
+* Discord
+* Google Calendar
 
-User preferences are represented as typed constraints rather than raw text.
+### Clone the project
 
-Examples include:
+```bash
+git clone <REPOSITORY_URL>
+cd concorde
+```
 
-- Date exclusions
-- Budget ceilings
-- Earliest acceptable times
-- Dietary restrictions
-- Activity preferences
-- Hard requirements
+### Install dependencies
 
-Constraints also retain their source:
+```bash
+pnpm install
+```
 
-- `stated`
-- `inferred_from_market`
-- `default_applied`
+### Configure environment variables
 
-A market-derived signal may influence the agent's recommendation, but it is never treated as if a user explicitly stated it.
+Copy the example environment file:
 
-## Planning under partial information
+```bash
+cp .env.example .env
+```
 
-Concorde does not require every group member to respond before making progress.
+Add the required credentials to `.env`.
 
-The planner can:
+The project supports real and twin-backed clients so development and evaluation do not need to send real SMS messages or modify real calendars.
 
-- Generate feasible options from the information currently available
-- Identify which person or missing constraint is blocking a decision
-- Ask the single question that most reduces uncertainty
-- Apply clearly announced defaults after a response threshold is exceeded
+Example configuration:
 
-This prevents one silent group member from blocking the entire trip.
+```text
+SMS_MODE=twin
+DISCORD_MODE=twin
+CALENDAR_MODE=twin
+```
 
-## Prediction markets
+For the live demo, the corresponding integrations can be switched to their real implementations.
 
-Markets are generated from uncertain nodes in the plan.
+### Initialize the database
 
-Supported market categories include:
+Concorde uses SQLite through Prisma.
 
-- Travel timing
-- Spending thresholds
-- Activity preference
-- Behavioral outcomes
-- Budget allocation
+Run the project's Prisma migration command to create the local database.
 
-Opening prices are generated separately from market creation.
+```bash
+pnpm prisma migrate dev
+```
 
-Closing prices may become additional planning signals. For example, if the group collectively prices the probability of making a 10:30 AM beach reservation below 50%, the agent can surface that signal and propose moving the reservation later.
+### Run the application
 
-The agent never silently changes a stated user constraint because of a market price.
+```bash
+pnpm dev
+```
 
-## Disruption handling
+Then open the local Next.js application in your browser.
 
-The plan is modeled as a dependency graph.
+### Run tests
 
-If a flight is delayed or missed, Concorde does not patch a single event in isolation. It recomputes every downstream item that depends on the disrupted event.
+```bash
+pnpm test
+```
 
-A disruption can trigger:
+### Run the evaluation suite
 
-- Divergence detection
-- Repair option generation
-- Calendar updates
-- User notifications
-- Market resolution
-- New prediction markets
+```bash
+pnpm eval
+```
 
-Irreversible repairs still require explicit approval.
+The evaluation environment uses resettable twins so scenarios can be executed repeatedly without sending real messages or creating real bookings.
 
-## System and reliability brief
+> Final command names should match the scripts in the completed repository.
 
-Reliability is treated as a core system property rather than a demo-layer concern.
+---
 
-### Stateful twins
+## 04. Reliability testing
 
-The system uses stateful twins for travel inventory so tests can exercise realistic sequences of actions instead of receiving canned responses.
+Reliability is a core part of Concorde's architecture because the agent is allowed to take actions across external systems.
 
-The twins support:
+We test both whether the agent makes good decisions and whether it behaves safely when external systems fail.
 
-- Stateful writes and reads
-- A controllable clock
-- Deterministic reset
-- Event injection
-- Fault injection
-- Request and response logs
-- Realistic status codes and error shapes
+### Stateful API twins
 
-Supported failure modes include:
+Our travel systems are implemented as stateful twins rather than static mocks.
 
-- Empty `200` responses
-- Write-then-timeout failures
-- Rate limiting
-- Duplicate webhooks
-- Stale reads
-- Partial batch success
-- Slow responses
+Each twin supports:
 
-### Irreversible-action gate
+```text
+reset
+clock control
+event injection
+fault injection
+request logging
+```
 
-Every action is classified as either:
+This lets us recreate the same scenario from a known initial state and compare agent behavior across runs.
 
-- `REVERSIBLE`
-- `IRREVERSIBLE`
+For example, the demo can deterministically inject:
 
-Irreversible actions require a recorded approval token before execution. This rule is enforced in the action dispatcher rather than delegated to an LLM prompt.
+```text
+Jake fails to check in
+        |
+        v
+Flight departs
+        |
+        v
+Missed-flight event observed
+        |
+        v
+Market resolves
+        |
+        v
+Plan repair begins
+```
 
-### Idempotency
+### Fault injection
 
-Every external write carries an idempotency key.
+The twins can intentionally simulate external-system failures including:
 
-This protects against duplicate bookings, double charges, and retry-related duplication when a request succeeds remotely but the response is lost.
+* rate limits
+* stale reads
+* slow responses
+* duplicate webhooks
+* partial writes
+* empty successful responses
+* writes that succeed before the connection times out
 
-### Typed boundaries
+One important case is a **write-then-timeout**.
 
-All external inputs and outputs are validated.
+The remote system performs the action, but Concorde never receives the response.
 
-Zod schemas are used for:
+Without protection, an agent might retry and perform the action twice.
 
-- User input
-- API responses
-- Twin responses
-- Webhooks
-- LLM outputs
+Concorde therefore attaches idempotency keys to external writes so retries cannot create duplicate bookings or charges.
 
-LLM responses that fail validation are rejected and retried with the validation error provided back to the model.
+### Human approval gates
 
-### Untrusted user text
+Agent actions are classified as:
 
-SMS and Discord content is treated as untrusted data.
+```text
+REVERSIBLE
+IRREVERSIBLE
+```
 
-User-generated text is explicitly delimited when passed to a model and is never allowed to become system instruction. Prompt-injection scenarios are included in the evaluation plan.
+Irreversible actions cannot execute without a recorded human approval.
 
-### Ambiguous outcomes
+This safety rule is enforced in application code rather than relying on the language model to remember to ask.
 
-Markets are not resolved when the observed evidence is insufficient.
+### Typed and validated boundaries
 
-Ambiguous outcomes escalate to a human instead of being guessed.
+External data is treated as untrusted.
+
+Zod schemas validate data crossing important system boundaries, including:
+
+* LLM outputs
+* user input
+* webhooks
+* API responses
+* twin responses
+
+Malformed model output is rejected instead of being silently accepted.
+
+### Prompt-injection testing
+
+SMS and Discord messages are treated as user-provided data, not agent instructions.
+
+The evaluation suite includes malicious messages attempting to make the agent:
+
+* bypass the confirmation gate
+* fabricate user constraints
+* contact opted-out members
+* falsely resolve markets
+
+### Ambiguous market resolution
+
+Concorde does not guess when the available evidence cannot conclusively resolve a market.
+
+Ambiguous outcomes are escalated for human review.
+
+### Planning evaluation
+
+The planner is evaluated across synthetic groups with different:
+
+* response rates
+* constraint densities
+* conflict rates
+* budgets
+* disruption types
+
+Important metrics include:
+
+**Plan convergence**
+
+How often can Concorde produce a feasible plan when:
+
+```text
+100% of the group responds
+75% responds
+50% responds
+25% responds
+```
+
+**Constraint extraction**
+
+Precision and recall for converting freeform traveler messages into structured constraints.
+
+**Repair correctness**
+
+Whether a disruption correctly propagates through every downstream dependency without modifying unrelated items.
+
+**Market calibration**
+
+Brier score comparing predicted market probabilities against observed outcomes.
+
+### Safety invariants
+
+Across evaluation runs, Concorde verifies several conditions that should never be violated:
+
+```text
+Never execute an irreversible action without approval.
+
+Never treat a market-inferred constraint as something a user stated.
+
+Never automatically resolve an ambiguous market.
+
+Never contact an opted-out traveler.
+
+Never double-book or double-charge during retries.
+```
 
 ### Observability
 
-Every agent action is traced with:
+Every major agent action is traced.
 
-- Inputs
-- Outputs
-- Latency
-- Retries
-- Model usage
-- Cost
+Traces record information such as:
 
-Twin request logs provide additional evidence for external interactions.
+* inputs
+* outputs
+* latency
+* retries
+* model usage
+* cost
 
-## Evaluation
+This allows failures to be inspected rather than hidden behind a successful-looking interface.
 
-The evaluation suite runs against resettable twins so scenarios can be repeated consistently without sending real messages or creating real external side effects.
+Final benchmark results and the observed failure taxonomy will be added after the complete evaluation suite is run.
 
-Planned evaluation areas include:
+---
 
-### Convergence under partial responses
+## 05. Demo video
 
-Measure how often the system reaches a feasible and optimal plan at different group response rates.
+**Demo:** [Watch the Concorde demo](DEMO_VIDEO_URL)
 
-Metrics include:
-
-- Feasible-option rate
-- Optimal-option rate
-- Message count
-
-### Constraint extraction
-
-Measure precision and recall against labeled freeform messages, including difficult cases such as:
-
-- Soft preferences phrased as hard requirements
-- Constraints buried in unrelated text
-- Contradictory user messages
-
-### Repair correctness
-
-Inject disruptions and verify that:
-
-- Every downstream dependency is recomputed
-- No orphaned bookings remain
-- Repairs do not modify unrelated plan items
-
-### Market calibration
-
-Compare agent opening prices and crowd closing prices against actual outcomes using Brier score.
-
-### Invariant checks
-
-The system should never:
-
-- Execute an irreversible action without approval
-- Promote an inferred constraint to a stated constraint
-- Resolve an ambiguous market automatically
-- Contact an opted-out member
-- Double-book or double-charge under retry
-
-Evaluation results should be added only after they are produced by the final evaluation suite.
-
-## Chaos testing
-
-The system is designed to be tested under injected faults across the full agent loop.
-
-Failures are categorized by:
-
-- Frequency
-- Observable symptom
-- Root cause
-- Current mitigation
-- Remaining limitation
-
-The goal is not to claim that every failure is eliminated. Known and reproducible limitations are documented rather than hidden.
-
-## Tech stack
-
-- TypeScript
-- Next.js App Router
-- SQLite
-- Prisma
-- Zod
-- Vitest
-- pnpm
-- Twilio
-- Discord
-- Google Calendar
-
-Core planning logic is isolated from framework and network code so it can be tested deterministically.
-
-## Project structure
+The submission video is under two minutes and demonstrates the complete Concorde loop:
 
 ```text
-apps/
-  web/          Web interface
-
-packages/
-  core/         Domain model and pure planning logic
-  agent/        Agent orchestration and model calls
-  twins/        Stateful external-system twins
-  eval/         Evaluation and chaos-testing harness
+group constraints
+      ↓
+trip planning
+      ↓
+prediction markets
+      ↓
+live disruption
+      ↓
+automatic market resolution
+      ↓
+plan repair
+      ↓
+new market
 ```
-
-## Scope
-
-The hackathon implementation focuses on:
-
-- One group of 4-6 people
-- One destination
-- A 2-3 day trip
-- Dates within a defined window
-- Budget allocation
-- Timing of scheduled items
-
-The project intentionally does not attempt to solve:
-
-- Multi-city routing
-- Production flight or hotel search
-- Visa logic
-- Packing lists
-- Restaurant discovery
-- Seat selection
-- Loyalty programs
-
-## Design principles
-
-1. The planner is the primary product; prediction markets extend it rather than replace it.
-2. Real user interactions should remain real wherever practical.
-3. Inventory simulations must be stateful and transparent.
-4. Irreversible actions require explicit approval.
-5. User text is data, never instruction.
-6. Repairs propagate through dependencies rather than patching isolated events.
-7. Inferred information is never presented as explicitly stated information.
-8. Reliability claims should be backed by traces, tests, and reproducible scenarios.
-
-## Status
-
-Hackathon prototype in development.
-
-Evaluation metrics and the final failure taxonomy will be added after the complete evaluation and chaos suites are run.
