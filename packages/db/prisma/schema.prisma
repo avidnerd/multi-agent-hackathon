@@ -120,6 +120,7 @@ model PlanItem {
   costCents        Int
   participantsJson String
   bookingRef       String?
+  inventoryId      String?
 
   plan       Plan                 @relation(fields: [planId], references: [id])
   dependsOn  PlanItemDependency[] @relation("Dependent")

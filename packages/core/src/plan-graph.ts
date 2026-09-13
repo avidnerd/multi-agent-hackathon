@@ -15,6 +15,44 @@ export function findMissingDependencies(nodes: readonly DependencyNode[]): Missi
   );
 }
 
+/** Kahn's algorithm, ties broken by input order so the result is deterministic. Nodes in a cycle are omitted. */
+export function topologicalOrder(nodes: readonly DependencyNode[]): string[] {
+  const ids = new Set(nodes.map((n) => n.id));
+  const remaining = new Map(nodes.map((n) => [n.id, n.dependsOn.filter((d) => ids.has(d)).length]));
+  const order: string[] = [];
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (const node of nodes) {
+      if (remaining.get(node.id) !== 0) continue;
+      order.push(node.id);
+      remaining.delete(node.id);
+      for (const other of nodes) {
+        const count = remaining.get(other.id);
+        if (count !== undefined && other.dependsOn.includes(node.id)) remaining.set(other.id, count - 1);
+      }
+      progressed = true;
+    }
+  }
+  return order;
+}
+
+/** Every node that transitively depends on rootId, in topological order, excluding the root. */
+export function downstreamOf(nodes: readonly DependencyNode[], rootId: string): string[] {
+  const reached = new Set<string>();
+  const frontier = [rootId];
+  while (frontier.length > 0) {
+    const current = frontier.pop();
+    for (const node of nodes) {
+      if (current !== undefined && node.dependsOn.includes(current) && !reached.has(node.id)) {
+        reached.add(node.id);
+        frontier.push(node.id);
+      }
+    }
+  }
+  return topologicalOrder(nodes).filter((id) => reached.has(id));
+}
+
 /** Returns the first cycle found as a closed path (first id repeated at the end), or null. */
 export function findDependencyCycle(nodes: readonly DependencyNode[]): readonly string[] | null {
   const byId = new Map(nodes.map((n) => [n.id, n]));

@@ -110,7 +110,7 @@ export const ConstraintSchema = z
     z.object({
       ...constraintBase,
       kind: z.literal("date_exclusion"),
-      value: z.object({ dates: z.array(IsoDateSchema).min(1) }),
+      value: z.object({ dates: z.array(IsoDateSchema) }),
     }),
     z.object({
       ...constraintBase,
@@ -155,6 +155,10 @@ export const ConstraintSchema = z
     }
     if (c.kind === "hard_requirement" && c.hardness !== "hard") {
       addIssue(ctx, ["hardness"], "a hard_requirement must be hard");
+    }
+    // An empty exclusion list means "any date works", which only a default can assert on someone's behalf.
+    if (c.kind === "date_exclusion" && c.value.dates.length === 0 && c.provenance.source !== "default_applied") {
+      addIssue(ctx, ["value", "dates"], "only a default can exclude no dates");
     }
   });
 export type Constraint = z.infer<typeof ConstraintSchema>;
@@ -230,6 +234,8 @@ export const PlanItemSchema = z
     costCents: CentsSchema,
     participants: z.array(IdSchema).min(1),
     bookingRef: z.string().nullable(),
+    /** The inventory record this item is drawn from: a flightId, hotelId or venueId. */
+    inventoryId: z.string().nullable(),
     dependsOn: z.array(IdSchema),
   })
   .superRefine((item, ctx) => {
@@ -278,6 +284,8 @@ export const CandidateOptionSchema = z.object({
   costPerPersonCents: CentsSchema,
   feasibleFor: z.array(IdSchema),
   blockedBy: z.array(BlockerSchema),
+  /** Soft constraints this option breaks. They rank options but never block them. */
+  softConflicts: z.array(z.object({ memberId: IdSchema, constraintId: IdSchema })),
 });
 export type CandidateOption = z.infer<typeof CandidateOptionSchema>;
 
@@ -468,7 +476,7 @@ export const ObservedEventSchema = z.discriminatedUnion("kind", [
   z.object({
     ...eventBase,
     kind: z.literal("reservation_seated"),
-    payload: z.object({ bookingRef: z.string(), partySize: z.number().int().positive() }),
+    payload: z.object({ bookingRef: z.string(), seatedMemberIds: z.array(IdSchema).min(1) }),
   }),
   z.object({
     ...eventBase,
@@ -526,7 +534,7 @@ export const AgentActionSchema = z.discriminatedUnion("kind", [
   z.object({
     ...actionBase,
     kind: z.literal("book_flight"),
-    params: z.object({ flightNumber: z.string(), memberIds: z.array(IdSchema).min(1) }),
+    params: z.object({ flightId: z.string(), memberIds: z.array(IdSchema).min(1) }),
   }),
   z.object({
     ...actionBase,
@@ -541,7 +549,7 @@ export const AgentActionSchema = z.discriminatedUnion("kind", [
   z.object({
     ...actionBase,
     kind: z.literal("modify_reservation"),
-    params: z.object({ bookingRef: z.string(), newAt: IsoDateTimeSchema }),
+    params: z.object({ bookingRef: z.string(), newAt: IsoDateTimeSchema.nullable(), guestIds: z.array(IdSchema).min(1).nullable() }),
   }),
   z.object({ ...actionBase, kind: z.literal("cancel_booking"), params: z.object({ bookingRef: z.string() }) }),
   z.object({ ...actionBase, kind: z.literal("open_market"), params: z.object({ marketId: IdSchema }) }),

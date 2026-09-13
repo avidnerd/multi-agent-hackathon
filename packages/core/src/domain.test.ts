@@ -14,7 +14,7 @@ const T0 = "2026-10-09T10:00:00Z";
 const T1 = "2026-10-09T12:00:00Z";
 
 function item(id: string, dependsOn: string[] = []): PlanItem {
-  return { id, kind: "activity", title: id, startsAt: T0, endsAt: T1, costCents: 0, participants: ["m1"], bookingRef: null, dependsOn };
+  return { id, kind: "activity", title: id, startsAt: T0, endsAt: T1, costCents: 0, participants: ["m1"], bookingRef: null, inventoryId: null, dependsOn };
 }
 
 const issuesOf = (result: { success: boolean; error?: { issues: { message: string }[] } }): string[] =>
