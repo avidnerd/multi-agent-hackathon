@@ -15,6 +15,7 @@ import {
   reversibilityOf,
   type AgentActionKind,
   type AppError,
+  type JsonValue,
   type Member,
   type Plan,
   type Result,
@@ -222,7 +223,15 @@ export function createBookingAgent(deps: BookingDeps) {
     return { completed, failure: null, plan, confirmationsSent };
   }
 
-  return { placeHolds, propose, approve, book };
+  /** One message to the whole group, through the gate under the standing messaging approval. */
+  async function announce(session: ElicitationSession, purpose: string, body: string): Promise<Result<JsonValue>> {
+    const { trip } = session;
+    const key = `${trip.id}:${purpose}:${trip.organizerId}`;
+    const action = AgentActionSchema.parse({ id: key, idempotencyKey: key, requestedAt: nowIso(), reason: purpose.replaceAll("-", " "), kind: "send_sms", params: { memberId: trip.organizerId, body } });
+    return dispatcherFor(session, null, new Map()).execute(action, { traceId: trip.id, step: "market_gen", approvalTokenId: session.standingApprovalId });
+  }
+
+  return { placeHolds, propose, approve, book, announce };
 }
 
 export type BookingAgent = ReturnType<typeof createBookingAgent>;

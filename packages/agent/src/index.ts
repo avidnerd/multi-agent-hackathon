@@ -3,6 +3,7 @@ export * from "./booking/activities";
 export * from "./booking/agent";
 export * from "./booking/selection";
 export * from "./dispatcher";
+export * from "./markets/book";
 export * from "./elicitation/agent";
 export * from "./elicitation/extraction";
 export * from "./elicitation/pricing";

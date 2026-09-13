@@ -100,6 +100,7 @@ function renderGate(state) {
   }
   if (state.phase === "booked") {
     parts.push(`<div class="approval"><svg class="box" viewBox="0 0 48 48" aria-hidden="true"><path d="M9 25 L20 36 L40 11" /></svg><p>Approved by ${esc(state.organizer)}. Booked and on everyone's calendar.</p></div>`);
+    if (state.marketsOpen) parts.push(`<p>Bets are open and everyone's link is in the group. <a class="markets-link" href="/markets" target="_blank" rel="noopener">Open the betting board</a></p>`);
   }
   $("gate").innerHTML = `${parts.join("")}<div class="actions">${actions.join("")}</div>`;
 }

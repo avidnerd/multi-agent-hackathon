@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { networkInterfaces } from "node:os";
 import { z } from "zod";
 import { createLogger, createTraceRecorder, describeError, err, formatLocalTime, localDateOf, ok, PhoneE164Schema, type Result, type TraceSpan } from "@trip/core";
 import {
@@ -18,6 +19,10 @@ import { GOOGLE_CALENDAR_API_BASE_URL, GOOGLE_OAUTH_TOKEN_URL, TWIN_GOOGLE_ACCES
 import {
   chooseActivities,
   createBookingAgent,
+  createMarketBook,
+  generateMarkets,
+  STARTING_CREDITS,
+  type MarketBook,
   createElicitationAgent,
   createMemoryApprovalStore,
   createMemoryExecutedStore,
@@ -32,6 +37,10 @@ import {
 import { googleCalendarTwin, inventoryTwin, startTwin, twilioTwin } from "@trip/twins";
 
 const POLL_INTERVAL_MS = 5_000;
+const DEFAULT_WEB_PORT = 4300;
+const TOKEN_CHARS = 12;
+const BetBodySchema = z.object({ player: z.string().min(1).max(64), marketId: z.string().min(1).max(64), outcome: z.string().min(1).max(60), spend: z.number().int().positive() });
+const ProposeBodySchema = z.object({ player: z.string().min(1).max(64), question: z.string().min(1).max(400) });
 const UTC_OFFSET_MINUTES = -420;
 /** Used only when no real group is configured, so the board can be demonstrated on the twins. */
 const SIMULATED_MEMBERS = "Maya:+14155550100,Cody:+14155550101,Dev:+14155550102,Sam:+14155550103";
@@ -96,6 +105,10 @@ export async function createTripSession(env: Env) {
     model: { label: "Claude Sonnet 5 via OpenRouter", real: true },
   };
 
+  // Phones open betting links over the local network, so links use this Mac's LAN address unless PUBLIC_URL says otherwise.
+  const lanAddress = Object.values(networkInterfaces()).flat().find((i) => i !== undefined && i.family === "IPv4" && !i.internal)?.address ?? "127.0.0.1";
+  const publicBaseUrl = env.PUBLIC_URL?.trim() || `http://${lanAddress}:${Number(env.WEB_PORT ?? DEFAULT_WEB_PORT)}`;
+
   const trace = createTraceRecorder({ now: () => new Date(), newId: randomUUID });
   const deps = {
     messaging: groupName === null ? createTwilioMessagingClient({ baseUrl: twilioServer.url, ...TWIN_TWILIO_CREDENTIALS }) : createIMessageClient({ groupChatName: groupName, selfHandle: env.IMESSAGE_SELF_HANDLE?.trim() || undefined }),
@@ -135,6 +148,7 @@ export async function createTripSession(env: Env) {
   let holds: Hold[] = [];
   let proposal: Proposal | null = null;
   let activityReasons: string[] = [];
+  let markets: MarketBook | null = null;
   let refusal: string | null = null;
   let report: BookingReport | null = null;
   let lastError: string | null = null;
@@ -200,7 +214,14 @@ export async function createTripSession(env: Env) {
       serial(async () => {
         if (session === null || proposal === null) return err({ kind: "internal", detail: "Draft the plan first" });
         report = await booking.book(session, proposal, booking.approve(session, proposal, intake.organizerId), holds);
-        if (report.failure !== null) lastError = describeError(report.failure.error);
+        if (report.failure !== null) {
+          lastError = describeError(report.failure.error);
+          return ok(null);
+        }
+        markets = createMarketBook(generateMarkets(report.plan, UTC_OFFSET_MINUTES), session.trip.members, () => randomUUID().replaceAll("-", "").slice(0, TOKEN_CHARS));
+        const links = markets.links(publicBaseUrl).map((l) => `${l.name}: ${l.url}`).join("\n");
+        const announced = await booking.announce(session, "betting-links", `Bets are open on the plan. Everyone has ${STARTING_CREDITS} play credits. Tap your own link:\n${links}`);
+        if (!announced.ok) lastError = describeError(announced.error);
         return ok(null);
       }),
   };
@@ -221,6 +242,7 @@ export async function createTripSession(env: Env) {
       window: "Oct 8–13, 3 days",
       modes,
       canSimulate: groupName === null && session !== null,
+      marketsOpen: markets !== null,
       canPropose: trip?.candidateOptions.some((o) => o.blockedBy.every((b) => b.reason !== "constraint_conflict")) ?? false,
       proposal: proposal === null ? null : { summary: proposal.summary, warnings: proposal.warnings, reasons: activityReasons },
       members: (trip?.members ?? intake.members.map((m) => ({ ...m, responseState: "unreached", optedOut: false, constraints: [] }))).map((m) => ({
@@ -263,5 +285,30 @@ export async function createTripSession(env: Env) {
     };
   }
 
-  return ok({ actions, snapshot });
+  const parseBody = <T>(schema: z.ZodType<T>, body: unknown): Result<T> => {
+    const parsed = schema.safeParse(body);
+    return parsed.success ? ok(parsed.data) : err({ kind: "validation_failed", boundary: "user_input", issues: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) });
+  };
+  const closed = (): Result<never> => err({ kind: "internal", detail: "Bets open once the plan is booked" });
+
+  /** Betting is reachable from phones on the network; each call is validated and tied to a member's link. */
+  const market = {
+    view: (token: string | null) => (markets === null ? { open: false as const } : { open: true as const, ...markets.view(token) }),
+    bet: (body: unknown): Result<null> => {
+      if (markets === null) return closed();
+      const input = parseBody(BetBodySchema, body);
+      if (!input.ok) return input;
+      const placed = markets.bet({ token: input.value.player, marketId: input.value.marketId, outcome: input.value.outcome, spend: input.value.spend });
+      return placed.ok ? ok(null) : placed;
+    },
+    propose: (body: unknown): Result<null> => {
+      if (markets === null) return closed();
+      const input = parseBody(ProposeBodySchema, body);
+      if (!input.ok) return input;
+      const created = markets.propose({ token: input.value.player, question: input.value.question });
+      return created.ok ? ok(null) : created;
+    },
+  };
+
+  return ok({ actions, snapshot, market });
 }

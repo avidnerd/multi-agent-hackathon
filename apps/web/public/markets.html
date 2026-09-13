@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Concorde odds</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/markets.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: The betting surface of the Flight Strips board, built as a mechanical tote board: prices on flip tiles, bets placed by pressing chips.
+      OWN-WORLD: Same aluminium bay, strip paper and ink as the board; dark flip tiles with a hinge line; chips in blue, yellow and ink with inset edge marks.
+      STORY: A member opens their link, sees Concorde's suggested questions and the group's own, presses a chip, and watches the price flip.
+      FORM: Flight Strips, extended to the market bay, seed fbd935d6.
+    -->
+    <header class="marquee">
+      <div>
+        <h1>Concorde odds</h1>
+        <p id="who">Connecting</p>
+      </div>
+      <div class="purse" aria-live="polite">
+        <span class="purse-label">Credits</span>
+        <span id="credits"></span>
+      </div>
+    </header>
+    <p id="notice" class="notice" role="status" hidden></p>
+    <main class="tote">
+      <section aria-labelledby="suggested-title">
+        <h2 id="suggested-title">Concorde's suggestions</h2>
+        <div id="suggested" class="markets"></div>
+      </section>
+      <section aria-labelledby="group-title">
+        <h2 id="group-title">The group's own bets</h2>
+        <div id="group" class="markets"></div>
+        <form id="ask" class="ask" hidden>
+          <label for="question">Ask the group something to bet on</label>
+          <div class="ask-row">
+            <input id="question" name="question" maxlength="140" autocomplete="off" placeholder="Does Cody oversleep the kayak tour?" />
+            <button type="submit">Put it on the board</button>
+          </div>
+        </form>
+      </section>
+      <aside class="standings" aria-labelledby="standings-title">
+        <h2 id="standings-title">Standings</h2>
+        <ol id="standings"></ol>
+      </aside>
+    </main>
+    <script type="module" src="/markets.js"></script>
+  </body>
+</html>
