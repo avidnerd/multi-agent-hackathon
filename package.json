@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
     "twins": "pnpm --filter @trip/twins start",
+    "elicit:demo": "pnpm --filter @trip/agent elicit:demo",
     "db:migrate": "pnpm --filter @trip/db migrate",
     "db:generate": "pnpm --filter @trip/db generate"
   },

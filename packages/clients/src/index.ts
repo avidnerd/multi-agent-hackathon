@@ -4,6 +4,7 @@ export * from "./google-calendar-client";
 export * from "./http";
 export * from "./interfaces";
 export * from "./inventory-client";
+export * from "./llm";
 export * from "./retry";
 export * from "./twilio-client";
 export * from "./twin-control-client";

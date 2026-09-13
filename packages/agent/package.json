@@ -2,5 +2,22 @@
   "name": "@trip/agent",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "elicit:demo": "tsx --env-file=../../.env src/scripts/elicit-demo.ts"
+  },
+  "dependencies": {
+    "@trip/clients": "workspace:*",
+    "@trip/core": "workspace:*",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@trip/twins": "workspace:*",
+    "@types/node": "^22",
+    "tsx": "^4"
+  }
 }

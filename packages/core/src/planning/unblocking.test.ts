@@ -55,6 +55,12 @@ describe("identifyUnblockingQuestion", () => {
     expect(question?.locksBestOption).toBe(false);
   });
 
+  it("quotes a soft stated constraint back without doubled punctuation", () => {
+    const members = [member("sam", "Sam", { constraints: [excludeDates("sam", "tue", ["2026-10-10"], "soft", said("Tuesdays are rough but I'll make it work."))] })];
+    const question = identifyUnblockingQuestion(computeFeasibleOptions(members, WINDOW, flat), members);
+    expect(question?.message).toBe('Hey Sam, you mentioned "Tuesdays are rough but I\'ll make it work". Is that a dealbreaker for Oct 9–11?');
+  });
+
   it("asks nothing when the best option is already lockable", () => {
     const members = [member("priya", "Priya"), member("sam", "Sam")];
     const options = computeFeasibleOptions(members, WINDOW, flat);

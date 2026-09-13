@@ -1,5 +1,5 @@
 import type { Constraint, Member, ResponseState } from "../domain";
-import { formatDollars } from "./format";
+import { formatDollars, joinNames } from "./format";
 
 export const DEFAULTABLE_KINDS = ["date_exclusion", "budget_ceiling", "time_floor"] as const;
 export type DefaultableKind = (typeof DEFAULTABLE_KINDS)[number];
@@ -24,8 +24,19 @@ export function shouldApplyDefault(member: Member, kind: DefaultableKind, silent
 
 export interface AppliedDefault {
   readonly constraint: Constraint;
-  /** Posted to the whole group before the default takes effect, so nobody is silently decided for. */
-  readonly announcement: string;
+  /** What is now assumed, as a clause: "a budget of $600 per person". Combine several with announceDefaults. */
+  readonly assumption: string;
+}
+
+/**
+ * The public notice for defaults, so nobody is silently decided for. The group hears about the silent
+ * member by name; the silent member gets the same news addressed to them.
+ */
+export function announceDefaults(memberName: string, assumptions: readonly string[], audience: "group" | "member"): string {
+  const assumed = joinNames(assumptions);
+  return audience === "group"
+    ? `I haven't heard from ${memberName}, so I'm assuming ${assumed}. ${memberName} can text me anytime to change that.`
+    : `I haven't heard back from you, so I'm assuming ${assumed}. Text me anytime to change that.`;
 }
 
 export interface ApplyDefaultInput {
@@ -46,21 +57,18 @@ export function applyDefault(input: ApplyDefaultInput): AppliedDefault {
     provenance: { source: "default_applied" as const, silentSince: input.silentSince, announcedAt: now },
     recordedAt: now,
   };
-  const unheard = `I haven't heard from ${member.name}`;
-  const change = `${member.name} can text me anytime to change it.`;
-
   switch (input.kind) {
     case "date_exclusion":
-      return { constraint: { ...base, kind: "date_exclusion", value: { dates: [] } }, announcement: `${unheard}, so I'm assuming any date in the window works. ${change}` };
+      return { constraint: { ...base, kind: "date_exclusion", value: { dates: [] } }, assumption: "any date in the window works" };
     case "budget_ceiling":
       return {
         constraint: { ...base, kind: "budget_ceiling", value: { amountCents: policy.budgetCeilingCents, scope: "trip_total" } },
-        announcement: `${unheard}, so I'm assuming a budget of ${formatDollars(policy.budgetCeilingCents)} per person. ${change}`,
+        assumption: `a budget of ${formatDollars(policy.budgetCeilingCents)} per person`,
       };
     case "time_floor":
       return {
         constraint: { ...base, kind: "time_floor", value: { earliest: policy.earliestStart, appliesTo: "any" } },
-        announcement: `${unheard}, so I'm keeping plans after ${policy.earliestStart}. ${change}`,
+        assumption: `nothing starts before ${policy.earliestStart}`,
       };
   }
 }

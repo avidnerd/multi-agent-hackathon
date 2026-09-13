@@ -56,7 +56,8 @@ function messageFor(item: Outstanding, member: Member, option: CandidateOption, 
     return `Hey ${member.name}, your calendar shows something on ${joinNames(busyDays)}. Is that a hard no for ${range}, or could it move?`;
   }
   if (constraint?.provenance.source === "stated") {
-    const quote = constraint.provenance.rawText.slice(0, QUOTE_MAX_CHARS);
+    // Trailing punctuation inside the quote collides with the sentence's own ("work.".).
+    const quote = constraint.provenance.rawText.slice(0, QUOTE_MAX_CHARS).replace(/[\s.!?,;:]+$/, "");
     return `Hey ${member.name}, you mentioned "${quote}". Is that a dealbreaker for ${range}?`;
   }
   return `Hey ${member.name}, would ${range} work for you?`;

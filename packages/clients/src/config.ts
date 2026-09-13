@@ -28,6 +28,20 @@ const CalendarConfigSchema = z.discriminatedUnion("CALENDAR_MODE", [
 
 const InventoryConfigSchema = z.object({ TWIN_INVENTORY_URL: z.url().default("http://127.0.0.1:4100") });
 
+const LlmConfigSchema = z.object({
+  LLM_PROVIDER: z.preprocess(unsetIfEmpty, z.literal("openrouter").default("openrouter")),
+  OPENROUTER_API_KEY: required,
+  LLM_MODEL: z.preprocess(unsetIfEmpty, z.string().min(1).default("anthropic/claude-sonnet-5")),
+});
+export type LlmConfig = z.infer<typeof LlmConfigSchema>;
+
+/** Separate from client config so twin-only runs and tests do not need a model key. */
+export function parseLlmConfig(env: Env): Result<LlmConfig> {
+  const parsed = LlmConfigSchema.safeParse(env);
+  if (parsed.success) return ok(parsed.data);
+  return err({ kind: "validation_failed", boundary: "config", issues: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) });
+}
+
 export interface ClientConfig {
   readonly messaging: z.infer<typeof MessagingConfigSchema>;
   readonly calendar: z.infer<typeof CalendarConfigSchema>;
