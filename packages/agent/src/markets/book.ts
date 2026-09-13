@@ -1,4 +1,4 @@
-import { err, formatDollars, formatLocalTime, lmsrPrices, localClock, ok, openingQuantities, sharesForSpend, type MarketKind, type Member, type Plan, type Result } from "@trip/core";
+import { err, formatDollars, formatLocalTime, lmsrCost, lmsrPrices, localClock, ok, openingQuantities, sharesForSpend, type MarketKind, type Member, type Plan, type Result } from "@trip/core";
 
 /** Play credits each member starts with. Nothing here is money. */
 export const STARTING_CREDITS = 100;
@@ -82,11 +82,13 @@ export function createMarketBook(drafts: readonly MarketDraft[], members: readon
   const markets: OpenMarket[] = drafts.map((d) => ({ ...d, quantities: openingQuantities(d.openingPrices, LIQUIDITY), volume: 0, createdBy: null }));
   const players: Player[] = members.map((m) => ({ id: m.id, name: m.name, token: newToken(), credits: STARTING_CREDITS, holdings: new Map() }));
 
+  // Holdings are worth what selling them back to the market maker would pay. Valuing at the post-trade
+  // price instead would show every bet as an instant profit, since buying pushes the price up.
   const valueOf = (player: Player): number =>
     markets.reduce((sum, m) => {
       const held = player.holdings.get(m.id);
-      const prices = lmsrPrices(m.quantities, LIQUIDITY);
-      return sum + (held ?? []).reduce((s, shares, i) => s + shares * (prices[i] ?? 0), 0);
+      if (held === undefined) return sum;
+      return sum + lmsrCost(m.quantities, LIQUIDITY) - lmsrCost(m.quantities.map((q, i) => q - (held[i] ?? 0)), LIQUIDITY);
     }, 0);
 
   function bet(input: BetInput): Result<{ shares: number }> {

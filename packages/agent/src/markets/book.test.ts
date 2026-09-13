@@ -34,6 +34,8 @@ describe("markets from the plan", () => {
     const after = b.view(julia ?? null);
     expect(after.markets[1]?.outcomes[1]?.cents).toBeGreaterThan(before);
     expect(after.player).toMatchObject({ name: "Julia", credits: STARTING_CREDITS - 25 });
+    // Selling straight back returns exactly what was paid, so a bet is never an instant profit.
+    expect(after.player?.worth).toBe(STARTING_CREDITS);
   });
 
   it("rejects bets it can't honour", () => {
