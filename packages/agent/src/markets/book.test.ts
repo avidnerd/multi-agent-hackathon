@@ -30,10 +30,10 @@ describe("markets from the plan", () => {
     const b = book();
     const [julia] = b.links("http://x").map((l) => l.url.split("player=")[1] ?? "");
     const before = b.view(null).markets[1]?.outcomes[1]?.cents ?? 0;
-    expect(b.bet({ token: julia ?? "", marketId: "make-venue-2-cove-kayak", outcome: "No", spend: 25 }).ok).toBe(true);
+    expect(b.bet({ token: julia ?? "", marketId: "make-venue-2-cove-kayak", outcome: "No", spend: 250 }).ok).toBe(true);
     const after = b.view(julia ?? null);
     expect(after.markets[1]?.outcomes[1]?.cents).toBeGreaterThan(before);
-    expect(after.player).toMatchObject({ name: "Julia", credits: STARTING_CREDITS - 25 });
+    expect(after.player).toMatchObject({ name: "Julia", credits: STARTING_CREDITS - 250 });
     // Selling straight back returns exactly what was paid, so a bet is never an instant profit.
     expect(after.player?.worth).toBe(STARTING_CREDITS);
     // The price chart gets the opening price and one point per bet, naming who moved it.

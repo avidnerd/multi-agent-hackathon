@@ -1,9 +1,9 @@
 import { err, formatDollars, formatLocalTime, lmsrCost, lmsrPrices, localClock, ok, openingQuantities, sharesForSpend, type MarketKind, type Member, type Plan, type Result } from "@trip/core";
 
 /** Play credits each member starts with. Nothing here is money. */
-export const STARTING_CREDITS = 100;
-/** Market maker liquidity: higher means prices move less per bet. */
-export const LIQUIDITY = 40;
+export const STARTING_CREDITS = 1_000;
+/** Market maker liquidity: higher means prices move less per bet. Scaled with credits so a chip moves the price the same share. */
+export const LIQUIDITY = 400;
 const EARLY_START = "10:00";
 const EARLY_FLIGHT = "08:00";
 const SPEND_MARGIN_CENTS = 10_000;

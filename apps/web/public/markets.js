@@ -1,6 +1,6 @@
 // Draws the betting board from /api/markets. Prices, credits and validation all live on the server.
 const POLL_INTERVAL_MS = 1500;
-const CHIPS = [5, 10, 25];
+const CHIPS = [50, 100, 250];
 const token = new URLSearchParams(location.search).get("player");
 
 const $ = (id) => document.getElementById(id);
@@ -112,7 +112,17 @@ function marketCard(market, player) {
     })
     .join("");
   const by = market.createdBy === null ? "Suggested by Concorde" : `Asked by ${esc(market.createdBy)}`;
-  return `<article class="market"><header><h3>${esc(market.question)}</h3><p class="byline"><span>${by}</span><span>${market.volume} credits bet</span></p></header><div class="outcomes">${outcomes}</div>${priceChart(market)}</article>`;
+  const inputId = `amount-${esc(market.id)}`;
+  const custom = player
+    ? `<form class="custom" data-market="${esc(market.id)}" novalidate>
+        <label for="${inputId}">Or bet your own amount</label>
+        <div class="custom-row">
+          <input id="${inputId}" name="amount" type="number" inputmode="numeric" min="1" max="${player.credits}" step="1" placeholder="175" />
+          ${market.outcomes.map((o) => `<button type="submit" name="outcome" value="${esc(o.name)}"${busy ? " disabled" : ""}>Bet on ${esc(o.name)}</button>`).join("")}
+        </div>
+      </form>`
+    : "";
+  return `<article class="market"><header><h3>${esc(market.question)}</h3><p class="byline"><span>${by}</span><span>${market.volume} credits bet</span></p></header><div class="outcomes">${outcomes}</div>${custom}${priceChart(market)}</article>`;
 }
 
 function render(state) {
@@ -134,12 +144,22 @@ function render(state) {
   $("credits").innerHTML = player ? flaps("credits", String(player.credits), "big") : "";
   $("ask").hidden = !player;
 
+  // Other people's bets redraw the cards; keep whatever amount someone is halfway through typing.
+  const typed = new Map([...document.querySelectorAll(".custom input")].map((input) => [input.id, input.value]));
+  const focusedId = document.activeElement instanceof HTMLInputElement && document.activeElement.closest(".custom") ? document.activeElement.id : null;
+
   const suggested = state.markets.filter((m) => m.createdBy === null);
   const fromGroup = state.markets.filter((m) => m.createdBy !== null);
   $("suggested").innerHTML = suggested.map((m) => marketCard(m, player)).join("");
   $("group").innerHTML = fromGroup.length
     ? fromGroup.map((m) => marketCard(m, player)).join("")
     : `<p class="empty">${player ? "Nobody has asked the group anything yet. Put a question on the board below." : "Nobody has asked the group anything yet."}</p>`;
+
+  for (const [id, value] of typed) {
+    const input = document.getElementById(id);
+    if (input instanceof HTMLInputElement) input.value = value;
+  }
+  if (focusedId !== null) document.getElementById(focusedId)?.focus();
   $("standings").innerHTML = state.standings
     .map((s, i) => `<li class="${player && s.name === player.name ? "me" : ""}"><span class="rank">${i + 1}</span><span>${esc(s.name)}</span>${flaps(`worth:${s.name}`, String(s.worth), "small")}</li>`)
     .join("");
@@ -180,6 +200,20 @@ document.addEventListener("click", (event) => {
   if (chip === null || busy || !token) return;
   const { market, outcome, spend } = chip.dataset;
   send("/api/bet", { player: token, marketId: market, outcome, spend: Number(spend) }, `Bet placed: ${spend} on ${outcome}`);
+});
+
+document.addEventListener("submit", async (event) => {
+  const form = event.target instanceof HTMLFormElement && event.target.classList.contains("custom") ? event.target : null;
+  if (form === null) return;
+  event.preventDefault();
+  if (busy || !token) return;
+  const outcome = event.submitter instanceof HTMLButtonElement ? event.submitter.value : "";
+  const input = form.querySelector("input");
+  const amount = Number(input?.value);
+  const max = Number(input?.max);
+  if (!Number.isInteger(amount) || amount < 1) return notice("Type a whole number of credits to bet", true);
+  if (amount > max) return notice(`You have ${max} credits left`, true);
+  if (await send("/api/bet", { player: token, marketId: form.dataset.market, outcome, spend: amount }, `Bet placed: ${amount} on ${outcome}`) && input) input.value = "";
 });
 
 document.addEventListener("pointermove", (event) => {
