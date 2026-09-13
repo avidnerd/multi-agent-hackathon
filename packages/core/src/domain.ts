@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { findDependencyCycle, findMissingDependencies } from "./plan-graph";
 
-export const GROUP_SIZE = { min: 4, max: 6 } as const;
+/** Three is the smallest group where "waiting on one person" is still a group problem; the demo group is three. */
+export const GROUP_SIZE = { min: 3, max: 6 } as const;
 export const TRIP_DAYS = { min: 2, max: 3 } as const;
 export const MARKET_OUTCOME_COUNT = { min: 2, max: 6 } as const;
 /** Market maker arithmetic is floating point, so prices sum to 1 only within a tolerance. */
