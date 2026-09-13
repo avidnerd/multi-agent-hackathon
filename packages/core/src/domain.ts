@@ -512,6 +512,7 @@ export const AGENT_ACTION_KINDS = [
   "cancel_booking",
   "open_market",
   "resolve_market",
+  "record_expenses",
 ] as const;
 export type AgentActionKind = (typeof AGENT_ACTION_KINDS)[number];
 
@@ -559,6 +560,13 @@ export const AgentActionSchema = z.discriminatedUnion("kind", [
     kind: z.literal("resolve_market"),
     params: z.object({ marketId: IdSchema, outcome: z.string().min(1) }),
   }),
+  z.object({
+    ...actionBase,
+    kind: z.literal("record_expenses"),
+    params: z.object({
+      expenses: z.array(z.object({ description: z.string().min(1).max(120), costCents: CentsSchema, memberIds: z.array(IdSchema).min(1) })).min(1).max(50),
+    }),
+  }),
 ]);
 export type AgentAction = z.infer<typeof AgentActionSchema>;
 
@@ -585,6 +593,8 @@ export const ACTION_REVERSIBILITY: { readonly [K in AgentActionKind]: Reversibil
   cancel_booking: IRREVERSIBLE,
   open_market: REVERSIBLE,
   resolve_market: IRREVERSIBLE,
+  // Splitwise emails every member about the group and each expense, so recording is noticed by others.
+  record_expenses: IRREVERSIBLE,
 };
 
 export const reversibilityOf = (action: AgentAction): Reversibility => ACTION_REVERSIBILITY[action.kind];

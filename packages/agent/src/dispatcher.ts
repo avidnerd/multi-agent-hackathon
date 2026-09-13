@@ -53,6 +53,8 @@ export function contactedMemberIds(action: AgentAction): string[] {
       return [action.params.memberId];
     case "write_calendar_event":
       return action.params.attendeeIds;
+    case "record_expenses":
+      return [...new Set(action.params.expenses.flatMap((e) => e.memberIds))];
     default:
       return [];
   }

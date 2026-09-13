@@ -8,5 +8,6 @@ export * from "./interfaces";
 export * from "./inventory-client";
 export * from "./llm";
 export * from "./retry";
+export * from "./splitwise-client";
 export * from "./twilio-client";
 export * from "./twin-control-client";

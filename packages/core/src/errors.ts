@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { AGENT_ACTION_KINDS, IdSchema } from "./domain";
 
-export const SERVICES = ["messaging", "calendar", "inventory", "llm", "db"] as const;
+export const SERVICES = ["messaging", "calendar", "inventory", "llm", "db", "splitwise"] as const;
 export type ServiceName = (typeof SERVICES)[number];
 
 export const VALIDATION_BOUNDARIES = ["llm_output", "api_response", "user_input", "webhook", "config"] as const;

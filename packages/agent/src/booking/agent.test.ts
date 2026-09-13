@@ -128,7 +128,8 @@ describe("booking an approved plan", () => {
       "book_reservation:venue-2-beach-club",
       "book_flight:return",
     ]);
-    expect(report.completed.slice(5).every((c) => c.kind === "write_calendar_event")).toBe(true);
+    expect(report.completed.slice(5, -1).every((c) => c.kind === "write_calendar_event")).toBe(true);
+    expect(report.completed.at(-1)?.kind).toBe("record_expenses");
     expect(report.plan.items.every((i) => i.bookingRef !== null)).toBe(true);
     expect(session.trip.status).toBe("booked");
 

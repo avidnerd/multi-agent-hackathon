@@ -60,5 +60,21 @@ export function planActions(plan: Plan, utcOffsetMinutes: number, requestedAt: s
       params: { planItemId: item.id, attendeeIds: item.participants },
     }),
   }));
-  return [...bookings, ...events];
+  const expenses = ordered.filter((item) => item.costCents > 0);
+  const split =
+    expenses.length === 0
+      ? []
+      : [
+          {
+            planItemId: expenses[0]?.id ?? "plan",
+            action: AgentActionSchema.parse({
+              ...identity(plan, "splitwise"),
+              requestedAt,
+              reason: "Record what everyone owes in Splitwise",
+              kind: "record_expenses",
+              params: { expenses: expenses.map((item) => ({ description: item.title, costCents: item.costCents, memberIds: item.participants })) },
+            }),
+          },
+        ];
+  return [...bookings, ...events, ...split];
 }

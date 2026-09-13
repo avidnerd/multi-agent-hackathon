@@ -22,7 +22,7 @@ import {
   type TraceRecorder,
   type UnblockingQuestion,
 } from "@trip/core";
-import type { CalendarClient, InventoryClient, LlmClient, MessagingClient } from "@trip/clients";
+import type { CalendarClient, InventoryClient, LlmClient, MessagingClient, SplitwiseClient } from "@trip/clients";
 import { createDispatcher, type ApprovalStore, type ExecutedActionStore } from "../dispatcher";
 import { handleInbound, type InboundOutcome } from "./inbound";
 import { pricingFromInventory } from "./pricing";
@@ -40,6 +40,8 @@ export interface AgentDeps {
   readonly messaging: MessagingClient;
   readonly calendar: CalendarClient;
   readonly inventory: InventoryClient;
+  /** Optional: when absent, recording expenses is skipped and says so. */
+  readonly splitwise?: SplitwiseClient;
   readonly llm: LlmClient;
   readonly trace: TraceRecorder;
   readonly logger: Logger;

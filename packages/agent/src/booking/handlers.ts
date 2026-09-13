@@ -3,7 +3,7 @@ import type { ActionHandler } from "../dispatcher";
 import type { AgentDeps } from "../elicitation/agent";
 import type { ElicitationSession } from "../elicitation/session";
 
-export type HandlerDeps = Pick<AgentDeps, "calendar" | "inventory" | "messaging">;
+export type HandlerDeps = Pick<AgentDeps, "calendar" | "inventory" | "messaging" | "splitwise">;
 
 const mismatch = (expected: AgentActionKind, action: AgentAction): Result<never> => err({ kind: "internal", detail: `${expected} handler received ${action.kind}` });
 
@@ -84,6 +84,25 @@ export function createPlanHandlers(deps: HandlerDeps, session: ElicitationSessio
         notifyAttendees: emails.length > 0,
       });
       return created.ok ? ok({ eventId: created.value.eventId }) : created;
+    },
+
+    record_expenses: async (action) => {
+      if (action.kind !== "record_expenses") return mismatch("record_expenses", action);
+      if (deps.splitwise === undefined) return ok({ skipped: "Splitwise is not connected" });
+      const emailOf = (id: string): string[] => {
+        const email = member(id)?.email;
+        return email === null || email === undefined ? [] : [email];
+      };
+      const members = trip.members.flatMap((m) => {
+        const [firstName = m.name, ...rest] = m.name.trim().split(/\s+/);
+        return m.email === null ? [] : [{ email: m.email, firstName, lastName: rest.join(" ") }];
+      });
+      const recorded = await deps.splitwise.recordTrip({
+        groupName: `${trip.destination} trip`,
+        members,
+        expenses: action.params.expenses.map((e) => ({ description: e.description, costCents: e.costCents, participantEmails: e.memberIds.flatMap(emailOf) })),
+      });
+      return recorded.ok ? ok({ groupUrl: recorded.value.groupUrl, expenses: recorded.value.expenses }) : recorded;
     },
 
     send_sms: async (action) => {

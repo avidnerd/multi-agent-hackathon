@@ -8,6 +8,7 @@ import {
   createIMessageClient,
   createInventoryClient,
   createOpenRouterClient,
+  createSplitwiseClient,
   createTwilioMessagingClient,
   createTwinControlClient,
   parseClientConfig,
@@ -52,7 +53,8 @@ const SIMULATED_REPLIES = [
   "Tuesdays are rough but I'll make it work. Budget maybe 700?",
 ];
 
-const APP_OF: Readonly<Record<string, "messaging" | "calendar" | "inventory" | "model">> = {
+const APP_OF: Readonly<Record<string, "messaging" | "calendar" | "inventory" | "model" | "splitwise">> = {
+  record_expenses: "splitwise",
   send_sms: "messaging",
   extract_constraints: "model",
   place_calendar_hold: "calendar",
@@ -94,6 +96,7 @@ export async function createTripSession(env: Env) {
   if (!members.ok) return members;
 
   const groupName = env.IMESSAGE_GROUP?.trim() || null;
+  const splitwiseKey = env.SPLITWISE_API_KEY?.trim() || null;
   const googleCalendar = clientConfig.value.calendar.CALENDAR_MODE === "google" ? clientConfig.value.calendar : null;
   const [inventoryServer, twilioServer, calendarServer] = await Promise.all([startTwin(inventoryTwin), startTwin(twilioTwin), startTwin(googleCalendarTwin)]);
   const smsControl = createTwinControlClient("messaging", twilioServer.url);
@@ -104,6 +107,7 @@ export async function createTripSession(env: Env) {
     calendar: googleCalendar === null ? { label: "Google Calendar twin", real: false } : { label: "Google Calendar", real: true },
     inventory: { label: "Travel inventory twin", real: false },
     model: { label: "Claude Sonnet 5 via OpenRouter", real: true },
+    splitwise: splitwiseKey === null ? { label: "Splitwise (not connected)", real: false } : { label: "Splitwise", real: true },
   };
 
   // Phones open betting links over the local network, so links use this Mac's LAN address unless PUBLIC_URL says otherwise.
@@ -122,6 +126,7 @@ export async function createTripSession(env: Env) {
             accessToken: createGoogleTokenProvider({ tokenUrl: GOOGLE_OAUTH_TOKEN_URL, clientId: googleCalendar.GOOGLE_CLIENT_ID, clientSecret: googleCalendar.GOOGLE_CLIENT_SECRET, refreshToken: googleCalendar.GOOGLE_REFRESH_TOKEN }),
           }),
     inventory: createInventoryClient({ baseUrl: inventoryServer.url }),
+    splitwise: splitwiseKey === null ? undefined : createSplitwiseClient({ apiKey: splitwiseKey }),
     llm: createOpenRouterClient({ apiKey: llmConfig.value.OPENROUTER_API_KEY, model: llmConfig.value.LLM_MODEL }),
     trace,
     logger: createLogger({ sink: (line) => void process.stdout.write(`log ${line.event} ${JSON.stringify(line.fields)}\n`), now: () => new Date(), minLevel: "warn" }),
@@ -246,6 +251,10 @@ export async function createTripSession(env: Env) {
       modes,
       canSimulate: groupName === null && session !== null,
       marketsOpen: markets !== null,
+      splitwiseUrl: (() => {
+        const span = trace.spans(intake.tripId).find((s) => s.name === "record_expenses" && s.status === "ok");
+        return span === undefined ? null : stringField(span, "groupUrl");
+      })(),
       canPropose: trip?.candidateOptions.some((o) => o.blockedBy.every((b) => b.reason !== "constraint_conflict")) ?? false,
       proposal: proposal === null ? null : { summary: proposal.summary, warnings: proposal.warnings, reasons: activityReasons },
       members: (trip?.members ?? intake.members.map((m) => ({ ...m, responseState: "unreached", optedOut: false, constraints: [] }))).map((m) => ({
