@@ -123,7 +123,8 @@ for (const deadline = Date.now() + WAIT_FOR_REPLY_MS; Date.now() < deadline; awa
   if (!report.ok) break;
   for (const outcome of report.value.inbound) {
     if (outcome.kind !== "extracted") {
-      out(`  ${outcome.kind === "unknown_sender" ? outcome.from : nameOf(outcome.memberId)}: ${outcome.kind}`);
+      const detail = outcome.kind === "extraction_failed" ? `, ${describeError(outcome.error)}` : "";
+      out(`  ${outcome.kind === "unknown_sender" ? outcome.from : nameOf(outcome.memberId)}: ${outcome.kind}${detail}`);
       continue;
     }
     heard += 1;

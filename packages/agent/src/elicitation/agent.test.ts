@@ -35,8 +35,12 @@ const intake: TripIntake = {
   defaults: { budgetCeilingCents: 60_000, earliestStart: "09:00" },
 };
 
+/** When set, the scripted model returns output that never parses, like a provider that is down or out of credit. */
+let modelDown = false;
+
 /** Stands in for the model with the extraction a correct model would return for each scripted reply. */
 function scriptedExtraction(request: LlmRequest): string {
+  if (modelDown) return "Service unavailable";
   const prompt = request.messages[1]?.content ?? "";
   const reply = (constraints: unknown[], answered: { dates: boolean; budget: boolean; schedule: boolean }) => JSON.stringify({ constraints, answered, optOut: false });
   if (prompt.includes("9th-11th")) {
@@ -77,6 +81,7 @@ async function advanceHours(hours: number): Promise<void> {
 const reply = (from: string, body: string) => sms.injectEvent({ kind: "inbound_sms", from, body });
 
 beforeEach(async () => {
+  modelDown = false;
   const [inventory, twilio, calendar] = await Promise.all([startTwin(inventoryTwin), startTwin(twilioTwin), startTwin(googleCalendarTwin)]);
   twins = { inventory, twilio, calendar };
   sms = createTwinControlClient("messaging", twilio.url);
@@ -157,6 +162,24 @@ describe("elicitation loop against the twins", () => {
     expect(tiers).toEqual([1, 2, 3]);
     expect(session.trip.members.find((m) => m.id === "dev")?.responseState).toBe("ghosted");
     expect(outboundTo("sam").at(-1)).toBe('Hey Sam, you mentioned "maybe 500". Is that a dealbreaker for Oct 9–11?');
+  });
+
+  it("does not count a reply the model could not read, and reads it once the model is back", async () => {
+    await advanceHours(1);
+    await reply(PHONES.maya, "Anything works for me. Max $900.");
+    modelDown = true;
+    const failed = await agent.tick(session);
+    if (!failed.ok) throw new Error(failed.error.kind);
+    expect(failed.value.inbound.map((o) => o.kind)).toEqual(["extraction_failed"]);
+    expect(session.trip.members.find((m) => m.id === "maya")?.responseState).toBe("asked");
+    expect(failed.value.summary).toMatch(/^0 of 4 replied\./);
+
+    modelDown = false;
+    const retried = await agent.tick(session);
+    if (!retried.ok) throw new Error(retried.error.kind);
+    expect(retried.value.inbound.map((o) => o.kind)).toEqual(["extracted"]);
+    expect(session.trip.members.find((m) => m.id === "maya")?.responseState).toBe("complete");
+    expect(session.messages.filter((m) => m.direction === "inbound")).toHaveLength(1);
   });
 
   it("honours STOP immediately and never texts that member again", async () => {

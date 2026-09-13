@@ -192,7 +192,10 @@ export function createElicitationAgent(deps: AgentDeps) {
     const inbound: InboundOutcome[] = [];
     for (const message of fresh) {
       session.seenExternalIds.add(message.externalId);
-      inbound.push(await handleInbound({ ...deps, channel: deps.messaging.channel }, session, message));
+      const outcome = await handleInbound({ ...deps, channel: deps.messaging.channel }, session, message);
+      // Read it again next tick rather than drop what the member said because the model was unavailable.
+      if (outcome.kind === "extraction_failed") session.seenExternalIds.delete(message.externalId);
+      inbound.push(outcome);
     }
 
     const options = () => computeFeasibleOptions(trip.members, trip.dateWindow, (start) => session.pricing[start] ?? null);

@@ -31,7 +31,10 @@ export async function handleInbound(deps: InboundDeps, session: ElicitationSessi
   }
 
   const messageId = `in-${inbound.externalId}`;
-  session.messages.push({ id: messageId, tripId: trip.id, memberId: member.id, channel: deps.channel, direction: "inbound", body: inbound.body, externalId: inbound.externalId, at: inbound.receivedAt });
+  // A reply whose extraction failed is handled again on the next tick; record the message once.
+  if (!session.messages.some((m) => m.id === messageId)) {
+    session.messages.push({ id: messageId, tripId: trip.id, memberId: member.id, channel: deps.channel, direction: "inbound", body: inbound.body, externalId: inbound.externalId, at: inbound.receivedAt });
+  }
   const thread = session.threads[member.id];
 
   // Carrier opt-out keywords are honoured before any model sees the text.
@@ -51,12 +54,12 @@ export async function handleInbound(deps: InboundDeps, session: ElicitationSessi
       maxTokens: EXTRACTION_MAX_TOKENS,
     },
   );
-  if (thread !== undefined) thread.repliedAt = inbound.receivedAt;
   if (!output.ok) {
     span.fail(output.error);
-    if (member.responseState === "asked" || member.responseState === "unreached") member.responseState = "partial";
+    // A reply nobody could read is not an answer. Counting it would let the planner lock dates around a person it knows nothing about.
     return { kind: "extraction_failed", memberId: member.id, error: output.error };
   }
+  if (thread !== undefined) thread.repliedAt = inbound.receivedAt;
 
   const accepted = acceptExtraction(output.value, { member, message: { id: messageId, body: inbound.body, at: inbound.receivedAt }, window: trip.dateWindow });
   member.constraints = [...member.constraints.filter((c) => !accepted.retractedIds.includes(c.id)), ...accepted.constraints];
