@@ -63,6 +63,29 @@ const SEND_SCRIPT = [
 
 export const sendArgs = (to: string, body: string): string[] => [...SEND_SCRIPT.flatMap((line) => ["-e", line]), to, body];
 
+/** Group chats are found by their display name; name and body travel as argv like the 1:1 script. */
+const GROUP_SEND_SCRIPT = [
+  "on run argv",
+  "set chatName to item 1 of argv",
+  "set messageText to item 2 of argv",
+  'tell application "Messages"',
+  "set targetChat to missing value",
+  "repeat with candidate in chats",
+  "try",
+  "if name of candidate is chatName then",
+  "set targetChat to candidate",
+  "exit repeat",
+  "end if",
+  "end try",
+  "end repeat",
+  'if targetChat is missing value then error "No Messages group named " & chatName',
+  "send messageText to targetChat",
+  "end tell",
+  "end run",
+] as const;
+
+export const groupSendArgs = (chatName: string, body: string): string[] => [...GROUP_SEND_SCRIPT.flatMap((line) => ["-e", line]), chatName, body];
+
 const NSSTRING_MARKER = "NSString";
 /** Bytes between the class name and the length prefix in a typedstream NSString. */
 const NSSTRING_HEADER_BYTES = 5;
@@ -105,6 +128,11 @@ const appleDateToMs = (date: number | bigint): number => {
 
 export interface IMessageConfig {
   readonly chatDbPath?: string;
+  /**
+   * When set, every message goes to this group chat instead of a 1:1 thread, and only replies posted
+   * in that group are read. The member a message is meant for is still named in its text.
+   */
+  readonly groupChatName?: string;
   readonly runAppleScript?: AppleScriptRunner;
   readonly now?: () => Date;
 }
@@ -118,7 +146,8 @@ export function createIMessageClient(config: IMessageConfig = {}): MessagingClie
     channel: "imessage",
 
     send: async ({ to, body }) => {
-      const outcome = await run(sendArgs(to, body), IMESSAGE_SEND_TIMEOUT_MS);
+      const group = config.groupChatName;
+      const outcome = await run(group === undefined ? sendArgs(to, body) : groupSendArgs(group, body), IMESSAGE_SEND_TIMEOUT_MS);
       if (!outcome.ok) {
         // A send that timed out may still have gone out, and Messages has no idempotency, so it is never marked retry-safe.
         return err(
@@ -139,16 +168,19 @@ export function createIMessageClient(config: IMessageConfig = {}): MessagingClie
       try {
         db = new DatabaseSync(chatDbPath, { readOnly: true });
         const placeholders = from.map(() => "?").join(", ");
+        const group = config.groupChatName;
+        const groupJoin = group === undefined ? "" : "JOIN chat_message_join cmj ON cmj.message_id = m.ROWID JOIN chat c ON c.ROWID = cmj.chat_id";
+        const groupFilter = group === undefined ? "" : "AND c.display_name = ?";
         const statement = db.prepare(
           `SELECT m.guid AS guid, m.text AS text, m.attributedBody AS attributedBody, m.date AS date, h.id AS handle
-           FROM message m JOIN handle h ON h.ROWID = m.handle_id
-           WHERE m.is_from_me = 0 AND m.date >= ? AND h.id IN (${placeholders})
+           FROM message m JOIN handle h ON h.ROWID = m.handle_id ${groupJoin}
+           WHERE m.is_from_me = 0 AND m.date >= ? ${groupFilter} AND h.id IN (${placeholders})
            ORDER BY m.date ASC LIMIT ${INBOUND_LIMIT}`,
         );
         // Message dates are nanoseconds since 2001, past Number's safe range; node:sqlite throws unless asked for BigInt.
         statement.setReadBigInts(true);
         const sinceNanos = BigInt(Math.max(0, Math.floor(since.getTime() - APPLE_EPOCH_MS))) * NANOS_PER_MS_BIG;
-        const rows = statement.all(sinceNanos, ...from);
+        const rows = group === undefined ? statement.all(sinceNanos, ...from) : statement.all(sinceNanos, group, ...from);
         const messages: InboundMessage[] = [];
         for (const raw of rows) {
           const row = ChatRowSchema.safeParse(raw);
