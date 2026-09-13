@@ -2,7 +2,7 @@
 
 **An AI group-travel agent that plans the trip in your group chat, books it only with the organizer's yes, and turns the plan's uncertainty into a market your friends bet on.**
 
-Concorde lives in a real iMessage group. It asks each traveler what constrains them, converges on a plan even when some people barely reply, picks activities from what the group actually wants, books flights, a hotel and reservations behind a hard approval gate, puts everything on Google Calendar, and then opens prediction markets on the booked plan. A web board shows the chat, the plan, the gate and every app call as it happens.
+Concorde lives in a real iMessage group. It asks each traveler what constrains them, converges on a plan even when some people barely reply, picks activities from what the group actually wants, books flights, a hotel and reservations behind a hard approval gate, puts everything on Google Calendar, records everyone's share in Splitwise, and then opens prediction markets on the booked plan. A web board shows the chat, the plan, the gate and every app call as it happens.
 
 ---
 
@@ -36,7 +36,7 @@ Most travel tools generate recommendations for one person. Concorde acts as an a
 
 4. **Confirm and book**
 
-   Concorde places tentative holds on Google Calendar, drafts the plan, and waits. Every action is typed **reversible** or **irreversible**, and irreversible ones (bookings, calendar invites, texts) cannot run without an approval token from the organizer. On approval it books in dependency order with idempotency keys, replaces the holds with real events that invite everyone by email, and texts each person their share.
+   Concorde places tentative holds on Google Calendar, drafts the plan, and waits. Every action is typed **reversible** or **irreversible**, and irreversible ones (bookings, calendar invites, texts) cannot run without an approval token from the organizer. On approval it books in dependency order with idempotency keys, replaces the holds with real events that invite everyone by email, creates a Splitwise group with each booked item split among the people on it, and texts each person their share.
 
 5. **Open prediction markets on the booked plan**
 
@@ -79,7 +79,8 @@ Most travel tools generate recommendations for one person. Concorde acts as an a
 |---|---|---|
 | **iMessage** (this Mac's Messages app) | Real | Posts each person's questions into the group, reads replies from the group, sends booking confirmations and personal betting links |
 | **Google Calendar** | Real | Tentative holds on the front-running dates, booked events with every member invited by email, availability from calendars shared with the organizer |
-| **Claude Sonnet 5** (via OpenRouter) | Real | Turns each freeform reply into validated, quote-backed constraints |
+| **Splitwise** | Real | After approval, creates a trip group with every member and records each booked item as an expense split among the people on it |
+| **Claude Sonnet 5** (via OpenRouter) | Real | The agent's model: turns each freeform reply into validated, quote-backed constraints |
 | **Travel inventory** (flights, hotel, reservations, check-in, charges) | Twin | Searches and books. A stateful twin we built, labeled "twin" on every screen |
 
 ### iMessage
@@ -97,6 +98,10 @@ Discord was cut. Instead:
 
 Holds are transparent (they don't mark the organizer busy). Event ids are derived from idempotency keys, so a retried create returns the existing event instead of making a second one.
 
+### Splitwise
+
+The account behind the API key pays up front, and each participant owes an even share of each item, with leftover cents assigned so shares add up exactly. Splitwise emails every member, so recording expenses is an **irreversible** action covered by the organizer's approval. It is not idempotent at Splitwise, so a timed-out attempt is never resent blind.
+
 ### Travel inventory twin
 
 Flights, hotels, reservations, check-ins and spending are a **stateful twin**, not a mock and not presented as a real airline or hotel API. Book a seat and inventory decrements. Check a passenger in and that state persists. When the controllable clock reaches departure, the flight looks at who actually checked in. We built it because no real inventory API lets you make a passenger miss a flight on command, and because a twin can be reset to a known seed and run hundreds of times.
@@ -111,6 +116,7 @@ Flights, hotels, reservations, check-ins and spending are a **stateful twin**, n
 * Node.js 22+
 * pnpm 9
 * An OpenRouter API key
+* A Splitwise API key (register an app at https://secure.splitwise.com/apps and generate a key)
 * Optional for real calendar invites: a Google Cloud OAuth client and refresh token with the `https://www.googleapis.com/auth/calendar` scope
 
 The terminal that runs Concorde needs **Full Disk Access** (to read replies) and **Automation → Messages** permission (to send), both under System Settings → Privacy & Security.
@@ -139,6 +145,8 @@ GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_REFRESH_TOKEN=...
 GOOGLE_CALENDAR_ID=primary
+
+SPLITWISE_API_KEY=...             # from https://secure.splitwise.com/apps; empty = expenses skipped
 ```
 
 With only the OpenRouter key set, everything except the model runs on twins, and the board offers "Simulate the group's replies".
