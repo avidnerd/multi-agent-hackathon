@@ -12,15 +12,27 @@ const shown = new Map();
 /** Latest history per market, for the chart's hover readout. */
 const histories = new Map();
 
-const CHART = { width: 320, height: 104, left: 36, right: 12, top: 10, bottom: 20 };
-const PLOT_WIDTH = CHART.width - CHART.left - CHART.right;
-const PLOT_HEIGHT = CHART.height - CHART.top - CHART.bottom;
-const TICKS = [0, 50, 100];
+const TICKS = [100, 50, 0];
 const TIP_EDGE_PERCENT = 18;
-
-const chartX = (index, count) => CHART.left + (count <= 1 ? PLOT_WIDTH : (index / (count - 1)) * PLOT_WIDTH);
-const chartY = (cents) => CHART.top + (1 - cents / 100) * PLOT_HEIGHT;
 const clockTime = (iso) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+/** Chart geometry lives in a 0–100 box stretched to the card, so labels stay HTML at a fixed readable size. */
+const xPercent = (index, count) => (count <= 1 ? 100 : (index / (count - 1)) * 100);
+const yPercent = (cents) => 100 - cents;
+
+/** Flip tiles for a value; only characters that changed since the last draw flip. */
+function flaps(key, text, size) {
+  const before = shown.get(key);
+  shown.set(key, text);
+  const tiles = [...text].map((ch, i) => `<span class="flap${before !== undefined && before[i] !== ch ? " flip" : ""}" aria-hidden="true">${esc(ch)}</span>`).join("");
+  return `<span class="flaps ${size}" role="img" aria-label="${esc(text.trim())}">${tiles}</span>`;
+}
+
+function notice(text, isError) {
+  const el = $("notice");
+  el.hidden = false;
+  el.textContent = text;
+  el.classList.toggle("is-error", isError);
+}
 
 /** Step line of the first outcome's price: each bet holds the price flat until the next one moves it. */
 function priceChart(market) {
@@ -31,30 +43,31 @@ function priceChart(market) {
   const first = points[0]?.cents[0] ?? 50;
   const last = points[count - 1]?.cents[0] ?? first;
 
-  let line = `M${CHART.left},${chartY(first)}`;
-  for (let i = 1; i < count; i += 1) line += ` H${chartX(i, count)} V${chartY(points[i].cents[0])}`;
-  if (count <= 1) line += ` H${CHART.left + PLOT_WIDTH}`;
-  const endX = count <= 1 ? CHART.left + PLOT_WIDTH : chartX(count - 1, count);
-  const baseline = CHART.top + PLOT_HEIGHT;
-  const grid = TICKS.map((c) => `<line class="grid" x1="${CHART.left}" x2="${CHART.width - CHART.right}" y1="${chartY(c)}" y2="${chartY(c)}"/><text class="tick" x="${CHART.left - 6}" y="${chartY(c) + 3}" text-anchor="end">${c}¢</text>`).join("");
+  let line = `M0,${yPercent(first)}`;
+  for (let i = 1; i < count; i += 1) line += ` H${xPercent(i, count)} V${yPercent(points[i].cents[0])}`;
+  if (count <= 1) line += " H100";
+  const grid = TICKS.map((c) => `<line class="grid" x1="0" x2="100" y1="${yPercent(c)}" y2="${yPercent(c)}"/>`).join("");
+  const ticks = TICKS.map((c) => `<span style="top:${yPercent(c)}%">${c}¢</span>`).join("");
   const bets = count - 1;
-  const label = `${outcome} price opened at ${first}¢ and is ${last}¢ after ${bets} ${bets === 1 ? "bet" : "bets"}`;
+  const label = `${outcome} price opened at ${first}¢ and is ${last}¢ after ${bets} ${bets === 1 ? "bet" : "bets"}. Use the arrow keys to step through bets.`;
   const rows = points.map((p) => `<tr><td>${clockTime(p.at)}</td><td>${p.by === null ? "Opening price" : `${esc(p.by)}'s bet`}</td><td>${p.cents[0]}¢</td></tr>`).join("");
 
   return `<figure class="chart">
     <figcaption>${esc(outcome)} price, one step per bet</figcaption>
-    <div class="chart-frame" data-market="${esc(market.id)}">
-      <svg viewBox="0 0 ${CHART.width} ${CHART.height}" role="img" aria-label="${esc(label)}" tabindex="0">
-        ${grid}
-        <path class="wash" d="${line} V${baseline} H${CHART.left} Z"/>
-        <path class="line" d="${line}"/>
-        <circle class="end" cx="${endX}" cy="${chartY(last)}" r="4"/>
-        <line class="crosshair" x1="0" x2="0" y1="${CHART.top}" y2="${baseline}" visibility="hidden"/>
-        <text class="tick" x="${CHART.left}" y="${CHART.height - 4}">Opened</text>
-        <text class="tick" x="${CHART.width - CHART.right}" y="${CHART.height - 4}" text-anchor="end">Now</text>
-      </svg>
-      <div class="chart-tip" hidden><strong></strong><span></span></div>
+    <div class="chart-body">
+      <div class="chart-ticks" aria-hidden="true">${ticks}</div>
+      <div class="chart-frame" data-market="${esc(market.id)}" tabindex="0" role="img" aria-label="${esc(label)}">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          ${grid}
+          <path class="wash" d="${line} V100 H0 Z"/>
+          <path class="line" d="${line}"/>
+          <line class="crosshair" x1="0" x2="0" y1="0" y2="100" visibility="hidden"/>
+        </svg>
+        <span class="chart-end" style="left:${xPercent(count - 1, count)}%;top:${yPercent(last)}%"></span>
+        <div class="chart-tip" hidden><strong></strong><span></span></div>
+      </div>
     </div>
+    <div class="chart-axis" aria-hidden="true"><span>Opened</span><span>Now</span></div>
     <details><summary>Price history</summary><table><thead><tr><th scope="col">Time</th><th scope="col">What moved it</th><th scope="col">${esc(outcome)}</th></tr></thead><tbody>${rows}</tbody></table></details>
   </figure>`;
 }
@@ -66,7 +79,7 @@ function showPoint(frame, index) {
   const count = entry.points.length;
   const i = Math.max(0, Math.min(count - 1, index));
   const point = entry.points[i];
-  const x = count <= 1 ? CHART.left + PLOT_WIDTH : chartX(i, count);
+  const x = xPercent(i, count);
   const crosshair = frame.querySelector(".crosshair");
   crosshair.setAttribute("x1", String(x));
   crosshair.setAttribute("x2", String(x));
@@ -74,7 +87,7 @@ function showPoint(frame, index) {
   const tip = frame.querySelector(".chart-tip");
   tip.querySelector("strong").textContent = `${point.cents[0]}¢ ${entry.outcome}`;
   tip.querySelector("span").textContent = `${point.by === null ? "opening price" : `after ${point.by}'s bet`}, ${clockTime(point.at)}`;
-  tip.style.left = `${Math.max(TIP_EDGE_PERCENT, Math.min(100 - TIP_EDGE_PERCENT, (x / CHART.width) * 100))}%`;
+  tip.style.left = `${Math.max(TIP_EDGE_PERCENT, Math.min(100 - TIP_EDGE_PERCENT, x))}%`;
   tip.hidden = false;
   frame.dataset.index = String(i);
 }
@@ -83,21 +96,6 @@ function hidePoint(frame) {
   frame.querySelector(".crosshair")?.setAttribute("visibility", "hidden");
   const tip = frame.querySelector(".chart-tip");
   if (tip) tip.hidden = true;
-}
-
-/** Flip tiles for a value; only characters that changed since the last draw flip. */
-function flaps(key, text, size) {
-  const before = shown.get(key);
-  shown.set(key, text);
-  const tiles = [...text].map((ch, i) => `<span class="flap${before !== undefined && before[i] !== ch ? " flip" : ""}" aria-hidden="true">${esc(ch)}</span>`).join("");
-  return `<span class="flaps ${size}" role="img" aria-label="${esc(text)}">${tiles}</span>`;
-}
-
-function notice(text, isError) {
-  const el = $("notice");
-  el.hidden = false;
-  el.textContent = text;
-  el.classList.toggle("is-error", isError);
 }
 
 function marketCard(market, player) {
@@ -133,7 +131,7 @@ function render(state) {
 
   const player = state.player;
   $("who").textContent = player ? `Betting as ${player.name}` : "Watching. Open the link Concorde texted you to bet.";
-  $("credits").innerHTML = player ? flaps("credits", String(player.credits).padStart(3, " "), "big") : "";
+  $("credits").innerHTML = player ? flaps("credits", String(player.credits), "big") : "";
   $("ask").hidden = !player;
 
   const suggested = state.markets.filter((m) => m.createdBy === null);
@@ -175,6 +173,8 @@ async function send(path, body, success) {
   }
 }
 
+const frameOf = (target) => (target instanceof Element ? target.closest(".chart-frame") : null);
+
 document.addEventListener("click", (event) => {
   const chip = event.target instanceof Element ? event.target.closest("button.chip") : null;
   if (chip === null || busy || !token) return;
@@ -183,33 +183,31 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("pointermove", (event) => {
-  const frame = event.target instanceof Element ? event.target.closest(".chart-frame") : null;
+  const frame = frameOf(event.target);
   if (frame === null) return;
   const entry = histories.get(frame.dataset.market);
-  const svg = frame.querySelector("svg");
-  if (entry === undefined || svg === null) return;
-  const box = svg.getBoundingClientRect();
-  const viewX = ((event.clientX - box.left) / box.width) * CHART.width;
-  const count = entry.points.length;
-  showPoint(frame, count <= 1 ? 0 : Math.round(((viewX - CHART.left) / PLOT_WIDTH) * (count - 1)));
+  if (entry === undefined) return;
+  const box = frame.getBoundingClientRect();
+  const fraction = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
+  showPoint(frame, Math.round(fraction * (entry.points.length - 1)));
 });
 
 document.addEventListener("pointerout", (event) => {
-  const frame = event.target instanceof Element ? event.target.closest(".chart-frame") : null;
+  const frame = frameOf(event.target);
   if (frame !== null && !(event.relatedTarget instanceof Node && frame.contains(event.relatedTarget))) hidePoint(frame);
 });
 
 // Keyboard readers get the same readout: focus shows the latest price, arrows step through bets.
 document.addEventListener("focusin", (event) => {
-  const frame = event.target instanceof Element ? event.target.closest(".chart-frame") : null;
+  const frame = frameOf(event.target);
   if (frame !== null) showPoint(frame, (histories.get(frame.dataset.market)?.points.length ?? 1) - 1);
 });
 document.addEventListener("focusout", (event) => {
-  const frame = event.target instanceof Element ? event.target.closest(".chart-frame") : null;
+  const frame = frameOf(event.target);
   if (frame !== null) hidePoint(frame);
 });
 document.addEventListener("keydown", (event) => {
-  const frame = event.target instanceof Element ? event.target.closest(".chart-frame") : null;
+  const frame = frameOf(event.target);
   if (frame === null || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
   event.preventDefault();
   showPoint(frame, Number(frame.dataset.index ?? 0) + (event.key === "ArrowRight" ? 1 : -1));
