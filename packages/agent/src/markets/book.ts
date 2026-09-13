@@ -91,7 +91,16 @@ export interface BetInput {
 
 const rejected = (issue: string): Result<never> => err({ kind: "validation_failed", boundary: "user_input", issues: [issue] });
 
-const centsOf = (quantities: readonly number[]): number[] => lmsrPrices(quantities, LIQUIDITY).map((p) => Math.round(p * 100));
+/** Whole cents per outcome that always sum to 100: rounding each price on its own can show 29¢ and 72¢. */
+function centsOf(quantities: readonly number[]): number[] {
+  const cents = lmsrPrices(quantities, LIQUIDITY).map((p) => Math.round(p * 100));
+  const drift = 100 - cents.reduce((sum, c) => sum + c, 0);
+  if (drift !== 0 && cents.length > 0) {
+    const largest = cents.indexOf(Math.max(...cents));
+    cents[largest] = (cents[largest] ?? 0) + drift;
+  }
+  return cents;
+}
 
 export function createMarketBook(drafts: readonly MarketDraft[], members: readonly Pick<Member, "id" | "name">[], newToken: () => string, now: () => Date = () => new Date()) {
   const opened = (quantities: number[]): PricePoint[] => [{ at: now().toISOString(), cents: centsOf(quantities), by: null }];
@@ -152,18 +161,44 @@ export function createMarketBook(drafts: readonly MarketDraft[], members: readon
     return {
       startingCredits: STARTING_CREDITS,
       markets: markets.map((m) => {
-        const prices = lmsrPrices(m.quantities, LIQUIDITY);
+        const cents = centsOf(m.quantities);
         const held = player?.holdings.get(m.id);
-        return { id: m.id, kind: m.kind, question: m.question, createdBy: m.createdBy, volume: m.volume, history: m.history, outcomes: m.outcomes.map((name, i) => ({ name, cents: Math.round((prices[i] ?? 0) * 100), held: held?.[i] ?? 0 })) };
+        return { id: m.id, kind: m.kind, question: m.question, createdBy: m.createdBy, volume: m.volume, history: m.history, outcomes: m.outcomes.map((name, i) => ({ name, cents: cents[i] ?? 0, held: held?.[i] ?? 0 })) };
       }),
       player: player === undefined ? null : { name: player.name, credits: player.credits, worth: Math.round(player.credits + valueOf(player)) },
       standings: players.map((p) => ({ name: p.name, worth: Math.round(p.credits + valueOf(p)) })).sort((a, b) => b.worth - a.worth),
     };
   }
 
+  /**
+   * What everyone would end with if each market settled as given. A winning share pays one credit and a
+   * losing share pays nothing. Markets not named settle on their current favorite. Nothing is changed.
+   */
+  function simulatePayout(chosen: Readonly<Record<string, string>>) {
+    const settled = markets.map((m) => {
+      const prices = lmsrPrices(m.quantities, LIQUIDITY);
+      const picked = m.outcomes.indexOf(chosen[m.id] ?? "");
+      return { market: m, winner: picked === -1 ? prices.indexOf(Math.max(...prices)) : picked, chosen: picked !== -1 };
+    });
+    const payoutOf = (player: Player): number => settled.reduce((sum, s) => sum + (player.holdings.get(s.market.id)?.[s.winner] ?? 0), 0);
+    const collected = markets.reduce((sum, m) => sum + m.volume, 0);
+    const paid = players.reduce((sum, p) => sum + payoutOf(p), 0);
+    return {
+      markets: settled.map((s) => ({ id: s.market.id, question: s.market.question, outcomes: s.market.outcomes, outcome: s.market.outcomes[s.winner] ?? "", chosen: s.chosen })),
+      players: players
+        .map((p) => {
+          const payout = payoutOf(p);
+          const final = p.credits + payout;
+          return { name: p.name, spent: STARTING_CREDITS - p.credits, credits: p.credits, payout: Math.round(payout), final: Math.round(final), net: Math.round(final - STARTING_CREDITS) };
+        })
+        .sort((a, b) => b.final - a.final),
+      maker: { collected, paid: Math.round(paid), net: Math.round(collected - paid) },
+    };
+  }
+
   const links = (baseUrl: string) => players.map((p) => ({ memberId: p.id, name: p.name, url: `${baseUrl}/markets?player=${p.token}` }));
 
-  return { bet, propose, view, links };
+  return { bet, propose, view, links, simulatePayout };
 }
 
 export type MarketBook = ReturnType<typeof createMarketBook>;

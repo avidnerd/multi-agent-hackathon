@@ -135,7 +135,69 @@ function renderCalls(state) {
     .join("");
 }
 
+/** Pretend outcomes the organizer picked, by market id. Unpicked markets settle on their favorite. */
+const payoutChoices = new Map();
+let payoutRendered = "";
+let lastState = null;
+
+async function renderPayout(state) {
+  const section = $("payout-section");
+  if (!state.marketsOpen) {
+    section.hidden = true;
+    return;
+  }
+  const query = [...payoutChoices].map(([id, outcome]) => `${id}:${outcome}`).join(",");
+  let data;
+  try {
+    const res = await fetch(`/api/payout?outcomes=${encodeURIComponent(query)}`);
+    data = await res.json();
+  } catch {
+    return;
+  }
+  // Show the panel only once there is something to show, e.g. not against a server that predates payouts.
+  if (!data.open) return;
+  section.hidden = false;
+  const serialized = JSON.stringify(data);
+  if (serialized === payoutRendered) return;
+  payoutRendered = serialized;
+
+  const markets = data.markets
+    .map(
+      (m) => `<li class="payout-market">
+        <span class="payout-question">${esc(m.question)}</span>
+        <span class="payout-toggle" role="group" aria-label="Pretend outcome for ${esc(m.question)}">${m.outcomes
+          .map((o) => `<button type="button" class="${o === m.outcome ? "is-on" : ""}" aria-pressed="${o === m.outcome}" data-payout-market="${esc(m.id)}" data-payout-outcome="${esc(o)}">${esc(o)}</button>`)
+          .join("")}</span>
+        <span class="payout-source">${m.chosen ? "picked" : "favorite"}</span>
+      </li>`,
+    )
+    .join("");
+  const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0");
+  const rows = data.players
+    .map((p) => `<tr><th scope="row">${esc(p.name)}</th><td class="num">${p.spent}</td><td class="num">${p.credits}</td><td class="num">${p.payout}</td><td class="num strong">${p.final}</td><td class="num">${signed(p.net)}</td></tr>`)
+    .join("");
+  const maker = data.maker;
+  $("payout").innerHTML = `<ol class="payout-markets">${markets}</ol>
+    <div class="payout-results">
+      <table class="payout-table">
+        <thead><tr><th scope="col">Who</th><th scope="col">Bet</th><th scope="col">Credits left</th><th scope="col">Payout</th><th scope="col">Ends with</th><th scope="col">Net</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="payout-maker">Market maker took in ${maker.collected} credits and would pay out ${maker.paid}, ${maker.net >= 0 ? `keeping ${maker.net}` : `losing ${Math.abs(maker.net)}`}.</p>
+    </div>`;
+}
+
+document.addEventListener("click", (event) => {
+  const choice = event.target instanceof Element ? event.target.closest("button[data-payout-market]") : null;
+  if (choice === null || lastState === null) return;
+  payoutChoices.set(choice.dataset.payoutMarket, choice.dataset.payoutOutcome);
+  payoutRendered = "";
+  renderPayout(lastState);
+});
+
 function render(state) {
+  lastState = state;
+  renderPayout(state);
   const serialized = JSON.stringify(state) + busy;
   if (serialized === lastRendered) return;
   lastRendered = serialized;

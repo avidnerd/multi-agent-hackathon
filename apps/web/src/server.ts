@@ -55,6 +55,7 @@ createServer((req, res) => {
   const handle = async (): Promise<void> => {
     if (req.method === "GET" && url.pathname === "/api/state") return json(res, HTTP.ok, trip.snapshot());
     if (req.method === "GET" && url.pathname === "/api/markets") return json(res, HTTP.ok, trip.market.view(url.searchParams.get("player")));
+    if (req.method === "GET" && url.pathname === "/api/payout") return json(res, HTTP.ok, trip.market.simulate(url.searchParams.get("outcomes")));
     if (req.method === "POST" && url.pathname === "/api/bet") return reply(trip.market.bet(await readJson(req)));
     if (req.method === "POST" && url.pathname === "/api/question") return reply(trip.market.propose(await readJson(req)));
     if (req.method === "POST" && url.pathname.startsWith("/api/")) {

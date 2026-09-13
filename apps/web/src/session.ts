@@ -306,6 +306,16 @@ export async function createTripSession(env: Env) {
   /** Betting is reachable from phones on the network; each call is validated and tied to a member's link. */
   const market = {
     view: (token: string | null) => (markets === null ? { open: false as const } : { open: true as const, ...markets.view(token) }),
+    /** `raw` is "marketId:Outcome" pairs separated by commas; read-only, so it needs no token. */
+    simulate: (raw: string | null) => {
+      if (markets === null) return { open: false as const };
+      const chosen: Record<string, string> = {};
+      for (const pair of (raw ?? "").split(",")) {
+        const at = pair.lastIndexOf(":");
+        if (at > 0) chosen[pair.slice(0, at)] = pair.slice(at + 1);
+      }
+      return { open: true as const, ...markets.simulatePayout(chosen) };
+    },
     bet: (body: unknown): Result<null> => {
       if (markets === null) return closed();
       const input = parseBody(BetBodySchema, body);

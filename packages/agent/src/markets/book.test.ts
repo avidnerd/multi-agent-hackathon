@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Plan } from "@trip/core";
-import { createMarketBook, generateMarkets, STARTING_CREDITS } from "./book";
+import { createMarketBook, generateMarkets, LIQUIDITY, STARTING_CREDITS } from "./book";
 
 const plan: Plan = {
   id: "trip-plan",
@@ -51,6 +51,18 @@ describe("markets from the plan", () => {
     expect(b.bet({ token, marketId: "spend-over", outcome: "Yes", spend: STARTING_CREDITS + 1 })).toMatchObject({ ok: false });
   });
 
+  it("shows prices that always add up to 100 cents", () => {
+    const b = book();
+    const [julia, cody] = b.links("http://x").map((l) => l.url.split("player=")[1] ?? "");
+    for (const [token, outcome, spend] of [[julia, "Yes", 70], [cody, "No", 130], [julia, "Yes", 45], [cody, "Yes", 5]] as const) {
+      b.bet({ token: token ?? "", marketId: "miss-outbound", outcome, spend });
+      for (const m of b.view(null).markets) {
+        expect(m.outcomes.reduce((sum, o) => sum + o.cents, 0)).toBe(100);
+        expect(m.history.at(-1)?.cents.reduce((sum, c) => sum + c, 0)).toBe(100);
+      }
+    }
+  });
+
   it("lets a member put their own question on the board for everyone", () => {
     const b = book();
     const [julia, cody] = b.links("http://x").map((l) => l.url.split("player=")[1] ?? "");
@@ -60,5 +72,52 @@ describe("markets from the plan", () => {
     expect(b.bet({ token: cody ?? "", marketId: "member-4", outcome: "No", spend: 10 }).ok).toBe(true);
     expect(b.propose({ token: cody ?? "", question: "does cody oversleep the kayak tour?" })).toMatchObject({ ok: false });
     expect(b.propose({ token: cody ?? "", question: "hi?" })).toMatchObject({ ok: false });
+  });
+});
+
+describe("simulated payout", () => {
+  const tokensOf = (b: ReturnType<typeof book>) => b.links("http://x").map((l) => l.url.split("player=")[1] ?? "");
+  const heldBy = (b: ReturnType<typeof book>, token: string, marketId: string, outcome: number) =>
+    b.view(token).markets.find((m) => m.id === marketId)?.outcomes[outcome]?.held ?? 0;
+
+  it("pays one credit per winning share, nothing for losing shares, and changes nothing", () => {
+    const b = book();
+    const [julia = "", cody = ""] = tokensOf(b);
+    b.bet({ token: julia, marketId: "spend-over", outcome: "Yes", spend: 100 });
+    b.bet({ token: cody, marketId: "spend-over", outcome: "No", spend: 150 });
+    const juliaYes = heldBy(b, julia, "spend-over", 0);
+    const codyNo = heldBy(b, cody, "spend-over", 1);
+
+    const yes = b.simulatePayout({ "spend-over": "Yes" });
+    expect(yes.players.find((p) => p.name === "Julia")).toMatchObject({ spent: 100, credits: 900, payout: Math.round(juliaYes), final: Math.round(900 + juliaYes) });
+    expect(yes.players.find((p) => p.name === "Cody")).toMatchObject({ spent: 150, payout: 0, final: 850, net: -150 });
+    expect(yes.maker).toEqual({ collected: 250, paid: Math.round(juliaYes), net: Math.round(250 - juliaYes) });
+    expect(yes.markets.find((m) => m.id === "spend-over")).toMatchObject({ outcome: "Yes", chosen: true });
+
+    const no = b.simulatePayout({ "spend-over": "No" });
+    expect(no.players.find((p) => p.name === "Cody")?.payout).toBe(Math.round(codyNo));
+    expect(no.players.find((p) => p.name === "Julia")?.payout).toBe(0);
+
+    // Simulating settles nothing: credits and prices are exactly as before.
+    expect(b.view(julia).player?.credits).toBe(900);
+    expect(b.simulatePayout({}).markets.find((m) => m.id === "spend-over")?.chosen).toBe(false);
+  });
+
+  it("never costs the market maker more than LMSR's bound, b·ln(1/opening price) of the winner", () => {
+    const b = book();
+    const [julia = "", cody = ""] = tokensOf(b);
+    // A deterministic mix of bets that pushes the price back and forth.
+    let seed = 7;
+    const next = () => (seed = (seed * 48_271) % 2_147_483_647);
+    for (let i = 0; i < 40; i += 1) {
+      const token = i % 2 === 0 ? julia : cody;
+      const outcome = next() % 3 === 0 ? "No" : "Yes";
+      b.bet({ token, marketId: "spend-over", outcome, spend: 10 + (next() % 40) });
+    }
+    const openingPrices = generateMarkets(plan, -420).find((d) => d.id === "spend-over")?.openingPrices ?? [];
+    ["Yes", "No"].forEach((outcome, i) => {
+      const loss = -b.simulatePayout({ "spend-over": outcome }).maker.net;
+      expect(loss).toBeLessThanOrEqual(LIQUIDITY * Math.log(1 / (openingPrices[i] ?? 1)) + 1);
+    });
   });
 });
