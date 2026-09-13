@@ -33,6 +33,13 @@ describe("twilio twin", () => {
     expect(inbound).toMatchObject([{ from: PRIYA, body: "9th works, not the 16th" }]);
   });
 
+  it("keeps a reply stamped in the same whole second the session started", async () => {
+    unwrap(await control.reset({ clock: "2026-10-01T16:00:00.400Z" }));
+    unwrap(await control.injectEvent({ kind: "inbound_sms", from: PRIYA, body: "under 500 works" }));
+    // Twilio's date_sent reads 16:00:00, before a session that started at 16:00:00.300.
+    expect(unwrap(await sms.listInbound(new Date("2026-10-01T16:00:00.300Z")))).toMatchObject([{ body: "under 500 works" }]);
+  });
+
   it("blocks sends after STOP with Twilio's 21610 and allows them again after START", async () => {
     unwrap(await control.injectEvent({ kind: "inbound_sms", from: PRIYA, body: "stop" }));
     expect(await sms.send({ to: PRIYA, body: "Still around?" })).toMatchObject({ ok: false, error: { kind: "conflict", code: "21610" } });

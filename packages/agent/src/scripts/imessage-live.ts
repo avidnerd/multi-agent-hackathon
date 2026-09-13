@@ -103,7 +103,7 @@ printOutbound(session);
 const liveSend = trace.spans(intake.tripId).find((s) => s.name === "send_sms" && s.status === "error");
 if (liveSend?.error) out(`  ${liveName}'s text failed: ${describeError(liveSend.error)}`);
 
-// The twin clock only moves when told. Without catching it up, simulated replies are stamped before the session started and get filtered out.
+// The twin clock only moves when told. Catch it up so simulated replies are stamped after the texts that asked for them.
 await sms.setClock(new Date().toISOString());
 await sms.injectEvent({ kind: "inbound_sms", from: SIMULATED.sam, body: "Tuesdays are rough but I'll make it work. Budget maybe 500?" });
 await sms.injectEvent({ kind: "inbound_sms", from: SIMULATED.maya, body: "Anything in that window works for me. Max $900 all in." });

@@ -17,6 +17,7 @@ export interface TwilioConfig {
 }
 
 const INBOUND_PAGE_SIZE = 200;
+const MS_PER_SECOND = 1_000;
 const ISO_DATE_LENGTH = 10;
 
 function twilioFailure(status: number, body: unknown, to: string): AppError | null {
@@ -70,9 +71,12 @@ export function createTwilioMessagingClient(config: TwilioConfig, fetchImpl: Fet
         timeoutMs: config.timeoutMs,
         mapFailure: (status, responseBody) => twilioFailure(status, responseBody, config.fromNumber),
       });
+      // Twilio stamps messages to the whole second. Comparing against a millisecond `since` drops a reply
+      // that lands in the same second the session started. Callers dedupe on externalId, so flooring is safe.
+      const sinceSecondMs = Math.floor(since.getTime() / MS_PER_SECOND) * MS_PER_SECOND;
       return mapResult(result, (page) =>
         page.messages
-          .filter((m) => m.direction === "inbound" && Date.parse(m.date_sent ?? m.date_created) >= since.getTime())
+          .filter((m) => m.direction === "inbound" && Date.parse(m.date_sent ?? m.date_created) >= sinceSecondMs)
           .filter((m) => from === undefined || from.includes(m.from))
           .map((m) => ({
             externalId: m.sid,
