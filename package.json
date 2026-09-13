@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",
+    "twins": "pnpm --filter @trip/twins start",
     "db:migrate": "pnpm --filter @trip/db migrate",
     "db:generate": "pnpm --filter @trip/db generate"
   },

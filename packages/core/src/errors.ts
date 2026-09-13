@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { AGENT_ACTION_KINDS, IdSchema } from "./domain";
 
-export const SERVICES = ["sms", "discord", "calendar", "inventory", "llm", "db"] as const;
+export const SERVICES = ["messaging", "calendar", "inventory", "llm", "db"] as const;
 export type ServiceName = (typeof SERVICES)[number];
 
-export const VALIDATION_BOUNDARIES = ["llm_output", "api_response", "twin_response", "user_input", "webhook"] as const;
+export const VALIDATION_BOUNDARIES = ["llm_output", "api_response", "user_input", "webhook", "config"] as const;
 export type ValidationBoundary = (typeof VALIDATION_BOUNDARIES)[number];
 
 export const LLM_CALLS = ["extract_constraints", "generate_markets", "set_opening_prices", "propose_repair"] as const;
@@ -56,7 +56,14 @@ export const AppErrorSchema = z.discriminatedUnion("kind", [
     // carried an idempotency key the far side dedupes on.
     retrySafe: z.boolean(),
   }),
-  z.object({ kind: z.literal("conflict"), service, resource: z.string(), detail: z.string() }),
+  z.object({
+    kind: z.literal("conflict"),
+    service,
+    resource: z.string(),
+    /** The provider's machine-readable code where it has one, e.g. insufficient_seats or 21610. */
+    code: z.string().nullable(),
+    detail: z.string(),
+  }),
   z.object({ kind: z.literal("not_found"), service, resource: z.string() }),
   z.object({ kind: z.literal("member_opted_out"), memberId: IdSchema }),
   z.object({ kind: z.literal("invariant_violated"), invariant: z.enum(INVARIANTS), detail: z.string() }),
@@ -70,6 +77,10 @@ export type Result<T, E = AppError> = { readonly ok: true; readonly value: T } |
 export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
 export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
 
+export function mapResult<T, U, E>(result: Result<T, E>, transform: (value: T) => U): Result<U, E> {
+  return result.ok ? ok(transform(result.value)) : result;
+}
+
 /** For the few places that must throw (the dispatcher gate, closed spans). Carries the typed error. */
 export class AppFailure extends Error {
   override readonly name = "AppFailure";
@@ -82,7 +93,7 @@ export function assertNever(value: never): never {
   throw new AppFailure({ kind: "internal", detail: `unhandled variant: ${JSON.stringify(value)}` });
 }
 
-const RETRYABLE_BOUNDARIES: readonly ValidationBoundary[] = ["llm_output", "api_response", "twin_response"];
+const RETRYABLE_BOUNDARIES: readonly ValidationBoundary[] = ["llm_output", "api_response"];
 const SERVER_ERROR_MIN_STATUS = 500;
 
 export function isRetryable(error: AppError): boolean {
@@ -126,7 +137,7 @@ export function describeError(error: AppError): string {
     case "timeout":
       return `${error.service} did not respond within ${error.afterMs}ms${error.retrySafe ? "" : " and the write may have applied"}`;
     case "conflict":
-      return `${error.service} rejected ${error.resource}: ${error.detail}`;
+      return `${error.service} rejected ${error.resource}${error.code === null ? "" : ` (${error.code})`}: ${error.detail}`;
     case "not_found":
       return `${error.service} has no ${error.resource}`;
     case "member_opted_out":

@@ -2,5 +2,23 @@
   "name": "@trip/twins",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "start": "tsx --env-file=../../.env src/main.ts"
+  },
+  "dependencies": {
+    "@trip/clients": "workspace:*",
+    "@trip/core": "workspace:*",
+    "express": "^5",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/express": "^5",
+    "@types/node": "^22",
+    "tsx": "^4"
+  }
 }

@@ -41,7 +41,7 @@ model Member {
   tripId        String
   name          String
   phone         String
-  discordId     String?
+  email         String?
   optedOut      Boolean @default(false)
   responseState String
 

@@ -6,8 +6,8 @@ export const TRIP_DAYS = { min: 2, max: 3 } as const;
 export const MARKET_OUTCOME_COUNT = { min: 2, max: 6 } as const;
 /** Market maker arithmetic is floating point, so prices sum to 1 only within a tolerance. */
 export const PRICE_SUM_TOLERANCE = 1e-6;
-/** Discord's limit; Twilio segments longer SMS bodies itself up to 1600. */
-export const MAX_MESSAGE_BODY_CHARS = 2000;
+/** Twilio rejects bodies over 1600 characters; iMessage has no practical limit. */
+export const MAX_MESSAGE_BODY_CHARS = 1600;
 const MS_PER_DAY = 86_400_000;
 
 // ---------------------------------------------------------------------------
@@ -174,7 +174,7 @@ export const MessageSchema = z.object({
   id: IdSchema,
   tripId: IdSchema,
   memberId: IdSchema.nullable(),
-  channel: z.enum(["sms", "discord"]),
+  channel: z.enum(["sms", "imessage"]),
   direction: z.enum(["inbound", "outbound"]),
   body: z.string().max(MAX_MESSAGE_BODY_CHARS),
   externalId: z.string().nullable(),
@@ -194,7 +194,7 @@ export const MemberSchema = z
     id: IdSchema,
     name: z.string().min(1).max(60),
     phone: PhoneE164Schema,
-    discordId: z.string().nullable(),
+    email: z.email().nullable(),
     optedOut: z.boolean(),
     responseState: ResponseStateSchema,
     constraints: z.array(ConstraintSchema),
@@ -489,7 +489,6 @@ export const AGENT_ACTION_KINDS = [
   "release_calendar_hold",
   "write_calendar_event",
   "send_sms",
-  "post_discord",
   "book_flight",
   "book_hotel",
   "book_reservation",
@@ -516,11 +515,6 @@ export const AgentActionSchema = z.discriminatedUnion("kind", [
     ...actionBase,
     kind: z.literal("send_sms"),
     params: z.object({ memberId: IdSchema, body: z.string().min(1).max(MAX_MESSAGE_BODY_CHARS) }),
-  }),
-  z.object({
-    ...actionBase,
-    kind: z.literal("post_discord"),
-    params: z.object({ channel: z.enum(["markets", "trip"]), body: z.string().min(1).max(MAX_MESSAGE_BODY_CHARS) }),
   }),
   z.object({
     ...actionBase,
@@ -568,7 +562,6 @@ export const ACTION_REVERSIBILITY: { readonly [K in AgentActionKind]: Reversibil
   release_calendar_hold: REVERSIBLE,
   write_calendar_event: IRREVERSIBLE,
   send_sms: IRREVERSIBLE,
-  post_discord: IRREVERSIBLE,
   book_flight: IRREVERSIBLE,
   book_hotel: IRREVERSIBLE,
   book_reservation: REVERSIBLE,
