@@ -1,0 +1,178 @@
+// Renders Concorde's state from /api/state. All domain logic lives on the server; this file only draws.
+const POLL_INTERVAL_MS = 1000;
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const STATE_LABELS = { unreached: "not texted", asked: "no reply yet", partial: "partly answered", complete: "answered", ghosted: "silent, default applied", "opted out": "opted out" };
+
+const $ = (id) => document.getElementById(id);
+const esc = (text) => String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const clock = (iso) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+const dollars = (cents) => `$${Math.round(cents / 100)}`;
+const dayLabel = (isoDate) => {
+  const d = new Date(`${isoDate}T12:00:00Z`);
+  return `${DAY_NAMES[d.getUTCDay()]} ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+};
+
+let busy = false;
+let lastRendered = "";
+
+function renderApps(state) {
+  $("apps").innerHTML = ["messaging", "calendar", "inventory", "model"]
+    .map((key) => {
+      const mode = state.modes[key];
+      return `<li><span class="app-name">${esc(mode.label)}</span><span class="app-mode${mode.real ? " live" : ""}">${mode.real ? "live" : "twin"}</span></li>`;
+    })
+    .join("");
+}
+
+function renderChat(state) {
+  if (state.messages.length === 0) {
+    $("chat").innerHTML = `<li class="empty">Nothing yet. Start planning and Concorde asks each person in the group what works for them.</li>`;
+    return;
+  }
+  $("chat").innerHTML = state.messages
+    .map((m) => {
+      const to = m.to === null ? "" : `<span class="to">to ${esc(m.to)}</span>`;
+      return `<li class="message${m.from === "Concorde" ? " concorde" : ""}"><span class="from">${esc(m.from)}${to}</span><span class="body">${esc(m.body)}</span></li>`;
+    })
+    .join("");
+}
+
+function renderPlan(state) {
+  const plan = $("plan");
+  if (state.plan === null) {
+    plan.className = "plan is-empty";
+    plan.innerHTML = `<p class="empty">No plan yet. Once dates work for everyone who replied, draft the plan from the organizer bay.</p>`;
+    return;
+  }
+  plan.className = "plan";
+  const days = [...new Set(state.plan.map((i) => i.day))].sort();
+  plan.innerHTML = days
+    .map((day) => {
+      const strips = state.plan
+        .filter((i) => i.day === day)
+        .map(
+          (i) => `<article class="strip${i.bookingRef ? " booked" : ""}">
+            <span class="when">${esc(i.time)}</span>
+            <div class="what">
+              <div class="title">${esc(i.title)}</div>
+              <div class="meta"><span>${esc(i.people.join(", "))}</span><span class="code">${i.bookingRef ? esc(i.bookingRef) : "not booked"}</span></div>
+              <div class="meta"><span>${dollars(i.costCents)}</span><span>${i.dependsOn.length ? `after ${esc(i.dependsOn.join(", "))}` : "first leg"}</span></div>
+            </div>
+          </article>`,
+        )
+        .join("");
+      return `<section class="day" aria-label="${dayLabel(day)}"><h3>${dayLabel(day)}</h3><div class="strips">${strips}</div></section>`;
+    })
+    .join("");
+}
+
+function button(action, label, secondary = false) {
+  return `<button type="button" data-action="${action}"${secondary ? ' class="secondary"' : ""}${busy ? " disabled" : ""}>${esc(label)}</button>`;
+}
+
+function renderGate(state) {
+  const parts = [];
+  const actions = [];
+  if (state.phase === "idle") {
+    parts.push(`<p>Concorde will text the group and ask each person which dates work, their budget, and what they'd skip.</p>`);
+    actions.push(button("start", "Text the group"));
+  }
+  if (state.phase === "eliciting") {
+    if (state.canSimulate) actions.push(button("simulate", "Simulate the group's replies", true));
+    actions.push(state.canPropose ? button("propose", "Draft the plan") : `<p class="warning">Concorde can draft the plan once some dates work for everyone who replied.</p>`);
+  }
+  if (state.proposal !== null) {
+    parts.push(`<div class="proposal"><p>${esc(state.proposal.summary)}</p>${state.proposal.warnings.map((w) => `<p class="warning">${esc(w)}</p>`).join("")}</div>`);
+  }
+  if (state.refusal !== null && state.phase !== "booked") parts.push(`<p class="refusal">Booking refused: ${esc(state.refusal)}</p>`);
+  if (state.phase === "proposed" || state.phase === "refused") {
+    const check = "";
+    parts.push(`<div class="approval"><svg class="box" viewBox="0 0 48 48" aria-hidden="true">${check}</svg><p>${esc(state.organizer)}'s approval</p></div>`);
+    if (state.phase === "proposed") actions.push(button("book-unapproved", "Try booking without approval", true));
+    actions.push(button("approve", `Approve as ${state.organizer} and book`));
+  }
+  if (state.phase === "booked") {
+    parts.push(`<div class="approval"><svg class="box" viewBox="0 0 48 48" aria-hidden="true"><path d="M9 25 L20 36 L40 11" /></svg><p>Approved by ${esc(state.organizer)}. Booked and on everyone's calendar.</p></div>`);
+  }
+  $("gate").innerHTML = `${parts.join("")}<div class="actions">${actions.join("")}</div>`;
+}
+
+function renderMembers(state) {
+  $("members").innerHTML = state.members
+    .map(
+      (m) => `<li class="member"><span class="name">${esc(m.name)}</span><span class="state">${esc(STATE_LABELS[m.state] ?? m.state)}</span>${
+        m.constraints.length ? `<span class="said">${esc(m.constraints.join("; "))}</span>` : ""
+      }</li>`,
+    )
+    .join("");
+}
+
+function renderCalls(state) {
+  if (state.calls.length === 0) {
+    $("calls").innerHTML = `<tr><td colspan="6" class="empty">No app calls yet. Every text, calendar write, booking and model call lands here.</td></tr>`;
+    return;
+  }
+  $("calls").innerHTML = state.calls
+    .map(
+      (c) => `<tr class="${c.ok ? "" : "failed"}">
+        <td class="time">${clock(c.at)}</td>
+        <td>${esc(c.app)}<span class="mode${c.real ? " live" : ""}">${c.real ? "live" : "twin"}</span></td>
+        <td>${esc(c.action)}</td>
+        <td>${c.ok ? "ok" : "refused or failed"}</td>
+        <td class="num">${c.latencyMs}ms${c.costUsd > 0 ? ` $${c.costUsd.toFixed(4)}` : ""}</td>
+        <td>${esc(c.detail)}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function render(state) {
+  const serialized = JSON.stringify(state) + busy;
+  if (serialized === lastRendered) return;
+  lastRendered = serialized;
+  $("summary").textContent = state.summary;
+  $("trip-facts").textContent = `${state.destination}, ${state.window}`;
+  const error = $("error");
+  error.hidden = state.lastError === null;
+  error.textContent = state.lastError === null ? "" : `Concorde hit a problem: ${state.lastError}`;
+  renderApps(state);
+  renderChat(state);
+  renderPlan(state);
+  renderGate(state);
+  renderMembers(state);
+  renderCalls(state);
+}
+
+async function poll() {
+  try {
+    const res = await fetch("/api/state");
+    render(await res.json());
+  } catch {
+    const error = $("error");
+    error.hidden = false;
+    error.textContent = "Can't reach Concorde's server. Check that pnpm web is still running.";
+  }
+}
+
+document.addEventListener("click", async (event) => {
+  const target = event.target instanceof Element ? event.target.closest("button[data-action]") : null;
+  if (target === null || busy) return;
+  busy = true;
+  lastRendered = "";
+  await poll();
+  const res = await fetch(`/api/${target.dataset.action}`, { method: "POST" });
+  const body = await res.json();
+  busy = false;
+  lastRendered = "";
+  if (!res.ok) {
+    const error = $("error");
+    error.hidden = false;
+    error.textContent = body.error;
+    return;
+  }
+  render(body);
+});
+
+poll();
+setInterval(poll, POLL_INTERVAL_MS);

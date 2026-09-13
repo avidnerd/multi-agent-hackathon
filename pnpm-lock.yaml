@@ -18,7 +18,30 @@ importers:
         specifier: ^3
         version: 3.2.7(@types/node@22.20.2)(jiti@2.7.0)(tsx@4.23.13)
 
-  apps/web: {}
+  apps/web:
+    dependencies:
+      '@trip/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+      '@trip/clients':
+        specifier: workspace:*
+        version: link:../../packages/clients
+      '@trip/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@trip/twins':
+        specifier: workspace:*
+        version: link:../../packages/twins
+      zod:
+        specifier: ^4
+        version: 4.6.4
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.2
+      tsx:
+        specifier: ^4
+        version: 4.23.13
 
   packages/agent:
     dependencies:

@@ -2,5 +2,20 @@
   "name": "@trip/web",
   "version": "0.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --env-file=../../.env src/server.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@trip/agent": "workspace:*",
+    "@trip/clients": "workspace:*",
+    "@trip/core": "workspace:*",
+    "@trip/twins": "workspace:*",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4"
+  }
 }

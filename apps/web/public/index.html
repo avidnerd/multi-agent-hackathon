@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Concorde</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: A group trip run like a flight strip board. Every plan item, message and app call is a strip Concorde moves and marks; refuses the chat-bubbles-plus-card-dashboard default.
+      OWN-WORLD: Aluminium bay ground #D5DADE, strip paper #F4F6F8, ink #111418, blue band booked, yellow band waiting, grease-pencil red #C42E21 for refusals and amendments. Archivo condensed for fields, Martian Mono for codes, times, money.
+      STORY: Judges see the group chat, the plan and every app call at once, watch the gate refuse a booking, then see the organizer's approval land and bookings print.
+      FIRST VIEWPORT: Header rail with the three connected apps; chat bay left, plan bays by day centre, gate and members right; app-call rail full width below.
+      FORM: Flight Strips, the pick card, seed fbd935d6.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+    -->
+    <header class="masthead">
+      <div class="brand">
+        <h1>Concorde</h1>
+        <p id="trip-facts">San Diego, Oct 8–13</p>
+      </div>
+      <p id="summary" class="summary" aria-live="polite">Connecting to Concorde</p>
+      <ul id="apps" class="apps" aria-label="Connected apps"></ul>
+    </header>
+    <p id="error" class="error" role="alert" hidden></p>
+    <main class="board">
+      <section class="bay bay-chat" aria-labelledby="chat-title">
+        <h2 id="chat-title">Group chat</h2>
+        <ol id="chat" class="chat"></ol>
+      </section>
+      <section class="bay bay-plan" aria-labelledby="plan-title">
+        <h2 id="plan-title">Plan</h2>
+        <div id="plan" class="plan"></div>
+      </section>
+      <section class="bay bay-gate" aria-labelledby="gate-title">
+        <h2 id="gate-title">Organizer</h2>
+        <div id="gate" class="gate"></div>
+        <h2 id="members-title">Who Concorde heard from</h2>
+        <ul id="members" class="members" aria-labelledby="members-title"></ul>
+      </section>
+    </main>
+    <section class="calls" aria-labelledby="calls-title">
+      <h2 id="calls-title">App calls, newest first</h2>
+      <div class="calls-scroll">
+        <table>
+          <thead>
+            <tr><th scope="col">Time</th><th scope="col">App</th><th scope="col">Action</th><th scope="col">Result</th><th scope="col">Latency</th><th scope="col">Detail</th></tr>
+          </thead>
+          <tbody id="calls"></tbody>
+        </table>
+      </div>
+    </section>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
