@@ -10,6 +10,19 @@ describe("parseClientConfig", () => {
     });
   });
 
+  it("accepts a Twilio API key pair in place of the auth token", () => {
+    const config = parseClientConfig({
+      MESSAGING_MODE: "twilio",
+      TWILIO_ACCOUNT_SID: `AC${"0".repeat(32)}`,
+      TWILIO_API_KEY_SID: `SK${"1".repeat(32)}`,
+      TWILIO_API_KEY_SECRET: "secret",
+      TWILIO_FROM_NUMBER: "+15005550006",
+    });
+    expect(config.ok).toBe(true);
+    const halfKey = parseClientConfig({ MESSAGING_MODE: "twilio", TWILIO_ACCOUNT_SID: `AC${"0".repeat(32)}`, TWILIO_API_KEY_SID: `SK${"1".repeat(32)}`, TWILIO_FROM_NUMBER: "+15005550006" });
+    expect(JSON.stringify(halfKey)).toContain("must be set together");
+  });
+
   it("names every missing credential when a real mode is chosen", () => {
     const config = parseClientConfig({ MESSAGING_MODE: "twilio", TWILIO_ACCOUNT_SID: "", CALENDAR_MODE: "google" });
     expect(config.ok).toBe(false);

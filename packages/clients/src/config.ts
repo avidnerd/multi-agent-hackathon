@@ -4,13 +4,16 @@ import { err, ok, PhoneE164Schema, type Result } from "@trip/core";
 /** Empty strings from a .env template mean "not set". */
 const unsetIfEmpty = (value: unknown): unknown => (value === "" ? undefined : value);
 const required = z.preprocess(unsetIfEmpty, z.string().min(1));
+const optional = z.preprocess(unsetIfEmpty, z.string().min(1).optional());
 
 const MessagingConfigSchema = z.discriminatedUnion("MESSAGING_MODE", [
   z.object({ MESSAGING_MODE: z.literal("twin"), TWIN_TWILIO_URL: z.url().default("http://127.0.0.1:4101") }),
   z.object({
     MESSAGING_MODE: z.literal("twilio"),
     TWILIO_ACCOUNT_SID: z.preprocess(unsetIfEmpty, z.string().regex(/^AC[0-9a-f]{32}$/, "must look like AC followed by 32 hex characters")),
-    TWILIO_AUTH_TOKEN: required,
+    TWILIO_AUTH_TOKEN: optional,
+    TWILIO_API_KEY_SID: z.preprocess(unsetIfEmpty, z.string().regex(/^SK[0-9a-f]{32}$/, "must look like SK followed by 32 hex characters").optional()),
+    TWILIO_API_KEY_SECRET: optional,
     TWILIO_FROM_NUMBER: z.preprocess(unsetIfEmpty, PhoneE164Schema),
   }),
 ]);
@@ -62,11 +65,21 @@ export function parseClientConfig(env: Env): Result<ClientConfig> {
   const messaging = MessagingConfigSchema.safeParse(withModes);
   const calendar = CalendarConfigSchema.safeParse(withModes);
   const inventory = InventoryConfigSchema.safeParse(withModes);
-  if (messaging.success && calendar.success && inventory.success) {
+  const credentialIssues: string[] = [];
+  if (messaging.success && messaging.data.MESSAGING_MODE === "twilio") {
+    const { TWILIO_AUTH_TOKEN, TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET } = messaging.data;
+    if ((TWILIO_API_KEY_SID === undefined) !== (TWILIO_API_KEY_SECRET === undefined)) {
+      credentialIssues.push("TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET must be set together");
+    } else if (TWILIO_API_KEY_SID === undefined && TWILIO_AUTH_TOKEN === undefined) {
+      credentialIssues.push("TWILIO_AUTH_TOKEN: set it, or set TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET");
+    }
+  }
+  if (messaging.success && calendar.success && inventory.success && credentialIssues.length === 0) {
     return ok({ messaging: messaging.data, calendar: calendar.data, inventory: inventory.data });
   }
-  const issues = [messaging.error, calendar.error, inventory.error]
-    .flatMap((e) => e?.issues ?? [])
-    .map((i) => `${i.path.join(".")}: ${i.message}`);
+  const issues = [
+    ...[messaging.error, calendar.error, inventory.error].flatMap((e) => e?.issues ?? []).map((i) => `${i.path.join(".")}: ${i.message}`),
+    ...credentialIssues,
+  ];
   return err({ kind: "validation_failed", boundary: "config", issues });
 }

@@ -22,6 +22,8 @@ export function createClients(config: ClientConfig, fetchImpl: FetchLike = fetch
             baseUrl: TWILIO_API_BASE_URL,
             accountSid: config.messaging.TWILIO_ACCOUNT_SID,
             authToken: config.messaging.TWILIO_AUTH_TOKEN,
+            apiKeySid: config.messaging.TWILIO_API_KEY_SID,
+            apiKeySecret: config.messaging.TWILIO_API_KEY_SECRET,
             fromNumber: config.messaging.TWILIO_FROM_NUMBER,
           },
           fetchImpl,

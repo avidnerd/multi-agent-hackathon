@@ -7,8 +7,12 @@ export interface TwilioConfig {
   /** https://api.twilio.com in real mode, the twin's URL otherwise. */
   readonly baseUrl: string;
   readonly accountSid: string;
-  readonly authToken: string;
   readonly fromNumber: string;
+  /** Account auth token. Used when no API key is given. */
+  readonly authToken?: string;
+  /** An API key (SK...) and its secret sign requests instead of the auth token; the URL still uses the account SID. */
+  readonly apiKeySid?: string;
+  readonly apiKeySecret?: string;
   readonly timeoutMs?: number;
 }
 
@@ -26,7 +30,9 @@ function twilioFailure(status: number, body: unknown, to: string): AppError | nu
 }
 
 export function createTwilioMessagingClient(config: TwilioConfig, fetchImpl: FetchLike = fetch): MessagingClient {
-  const authorization = `Basic ${Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64")}`;
+  const [username, password] =
+    config.apiKeySid !== undefined && config.apiKeySecret !== undefined ? [config.apiKeySid, config.apiKeySecret] : [config.accountSid, config.authToken ?? ""];
+  const authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
   const messagesUrl = `${config.baseUrl}/2010-04-01/Accounts/${config.accountSid}/Messages.json`;
 
   return {
