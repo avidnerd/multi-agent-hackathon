@@ -324,6 +324,14 @@ h2 {
   }
 }
 
+.reasons {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0 0 1rem;
+  border-top: 1px solid #b7bec4;
+  font-size: var(--step-0);
+  color: var(--ink-soft);
+}
+
 .refusal {
   position: relative;
   color: var(--red);

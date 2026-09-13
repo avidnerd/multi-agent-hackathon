@@ -16,12 +16,12 @@ import {
 } from "@trip/clients";
 import { GOOGLE_CALENDAR_API_BASE_URL, GOOGLE_OAUTH_TOKEN_URL, TWIN_GOOGLE_ACCESS_TOKEN, TWIN_TWILIO_CREDENTIALS } from "@trip/clients/contracts";
 import {
+  chooseActivities,
   createBookingAgent,
   createElicitationAgent,
   createMemoryApprovalStore,
   createMemoryExecutedStore,
   describeConstraint,
-  type ActivityRequest,
   type BookingReport,
   type ElicitationSession,
   type Hold,
@@ -33,10 +33,6 @@ import { googleCalendarTwin, inventoryTwin, startTwin, twilioTwin } from "@trip/
 
 const POLL_INTERVAL_MS = 5_000;
 const UTC_OFFSET_MINUTES = -420;
-const ACTIVITIES: ActivityRequest[] = [
-  { venueId: "tidewater", activity: "dinner", dayOffset: 0, localTime: "19:00", durationMinutes: 90 },
-  { venueId: "beach-club", activity: "beach", dayOffset: 1, localTime: "10:30", durationMinutes: 120 },
-];
 /** Used only when no real group is configured, so the board can be demonstrated on the twins. */
 const SIMULATED_MEMBERS = "Maya:+14155550100,Cody:+14155550101,Dev:+14155550102,Sam:+14155550103";
 const SIMULATED_REPLIES = [
@@ -138,6 +134,7 @@ export async function createTripSession(env: Env) {
   let summary = "Concorde hasn't texted anyone yet.";
   let holds: Hold[] = [];
   let proposal: Proposal | null = null;
+  let activityReasons: string[] = [];
   let refusal: string | null = null;
   let report: BookingReport | null = null;
   let lastError: string | null = null;
@@ -184,7 +181,9 @@ export async function createTripSession(env: Env) {
         const current = require(session, "Start planning first");
         if (!current.ok) return current;
         holds = await booking.placeHolds(current.value);
-        const drafted = await booking.propose(current.value, ACTIVITIES);
+        const picks = chooseActivities(current.value.trip.members);
+        const drafted = await booking.propose(current.value, picks.map((p) => p.request));
+        activityReasons = picks.map((p) => p.reason);
         if (!drafted.ok) return drafted;
         proposal = drafted.value;
         refusal = null;
@@ -223,7 +222,7 @@ export async function createTripSession(env: Env) {
       modes,
       canSimulate: groupName === null && session !== null,
       canPropose: trip?.candidateOptions.some((o) => o.blockedBy.every((b) => b.reason !== "constraint_conflict")) ?? false,
-      proposal: proposal === null ? null : { summary: proposal.summary, warnings: proposal.warnings },
+      proposal: proposal === null ? null : { summary: proposal.summary, warnings: proposal.warnings, reasons: activityReasons },
       members: (trip?.members ?? intake.members.map((m) => ({ ...m, responseState: "unreached", optedOut: false, constraints: [] }))).map((m) => ({
         name: m.name,
         state: m.optedOut ? "opted out" : m.responseState,

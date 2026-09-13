@@ -1,4 +1,5 @@
 export * from "./booking/actions";
+export * from "./booking/activities";
 export * from "./booking/agent";
 export * from "./booking/selection";
 export * from "./dispatcher";

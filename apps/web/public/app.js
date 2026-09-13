@@ -88,7 +88,8 @@ function renderGate(state) {
     actions.push(state.canPropose ? button("propose", "Draft the plan") : `<p class="warning">Concorde can draft the plan once some dates work for everyone who replied.</p>`);
   }
   if (state.proposal !== null) {
-    parts.push(`<div class="proposal"><p>${esc(state.proposal.summary)}</p>${state.proposal.warnings.map((w) => `<p class="warning">${esc(w)}</p>`).join("")}</div>`);
+    const reasons = state.proposal.reasons.length ? `<ul class="reasons">${state.proposal.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : "";
+    parts.push(`<div class="proposal"><p>${esc(state.proposal.summary)}</p>${reasons}${state.proposal.warnings.map((w) => `<p class="warning">${esc(w)}</p>`).join("")}</div>`);
   }
   if (state.refusal !== null && state.phase !== "booked") parts.push(`<p class="refusal">Booking refused: ${esc(state.refusal)}</p>`);
   if (state.phase === "proposed" || state.phase === "refused") {

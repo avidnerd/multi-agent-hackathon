@@ -22,7 +22,7 @@ export function initialQuestions(input: InitialQuestionsInput): string {
     opener,
     `1. Which ${window.tripDays} days between ${range} work for you?${busy}`,
     `2. What's the most you'd want to spend, all in?`,
-    `3. Anything you'd skip or can't do, like early starts or certain food?`,
+    `3. What do you want to do while we're there, and is there anything you'd skip, like early starts or certain food?`,
     `Reply in your own words.`,
   ].join("\n");
 }
